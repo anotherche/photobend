@@ -35,8 +35,8 @@
 	</developers>
 
 	<scm>
-		<connection>scm:git:git://github.com/anotherche/photobend</connection>
-		<developerConnection>scm:git:git://github.com/anotherche/photobend</developerConnection>
+		<connection>scm:git:git://github.com/anotherche/photobend.git</connection>
+		<developerConnection>scm:git:git://github.com/anotherche/photobend.git</developerConnection>
 		<tag>HEAD</tag>
 		<url>https://github.com/anotherche/photobend</url>
 	</scm>
