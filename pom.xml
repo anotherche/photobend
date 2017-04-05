@@ -18,6 +18,14 @@
 
 	<name>plugins/Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
+	
+	<distributionManagement>
+       <repository>
+         <id>internal.repo</id>
+         <name>Internal repo</name>
+         <url>file://D:\deploy</url>
+       </repository>
+   </distributionManagement>
 
 	<developers>
 		<developer>
@@ -157,6 +165,23 @@
 				<artifactId>maven-release-plugin</artifactId>
 				<version>2.5.3</version>
 			</plugin>
+			<plugin>
+		        <groupId>org.codehaus.mojo</groupId>
+		        <artifactId>buildnumber-maven-plugin</artifactId>
+		        <version>1.4</version>
+		        <executions>
+		          <execution>
+		            <phase>validate</phase>
+		            <goals>
+		              <goal>create</goal>
+		            </goals>
+		          </execution>
+		        </executions>
+		        <configuration>
+		          <doCheck>true</doCheck>
+		          <doUpdate>true</doUpdate>
+		        </configuration>
+      		</plugin>
 		</plugins>
 	</build>
 
