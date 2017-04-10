@@ -6,10 +6,10 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>net.imagej</groupId>
-		<artifactId>pom-imagej</artifactId>
-		<version>16.5.0</version>
-		<relativePath />
+		<groupId>org.scijava</groupId>
+		<artifactId>pom-scijava</artifactId>
+		<version>14.0.0</version>
+	<relativePath />
 	</parent>
 
 	<groupId>anotherche.photobend</groupId> 
@@ -18,29 +18,61 @@
 
 	<name>plugins/Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
+	<url>http://sites.imagej.net/Anotherche/plugins/</url>
+	<inceptionYear>2017</inceptionYear>
+	 <organization>
+        <name>ISSCM SB RAS</name>
+        <url>http://www.solid.nsc.ru/</url>
+	</organization>
 	
-	<distributionManagement>
-       <repository>
-         <id>internal.repo</id>
-         <name>Internal repo</name>
-         <url>file://D:\deploy</url>
-       </repository>
-   </distributionManagement>
+	<licenses>
+		<license>
+			<name>GNU General Public License</name>
+			<url>http://www.gnu.org/licenses/gpl.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
+	<mailingLists>
+        <mailingList>
+            <name>ImageJ Forum</name>
+            <archive>http://forum.imagej.net/</archive>
+        </mailingList>
+	</mailingLists>
+	
+	<issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/anotherche/laser-spot-track/issues</url>
+    </issueManagement>
+    <ciManagement>
+        <system>None</system>
+	</ciManagement>
+	
 	<developers>
-		<developer>
-			<id>anotherche</id>
-			<name>Stanislav Chizhik</name>
-			<email>csagbox@gmail.com</email>
-			<url>http://www.solid.nsc.ru/</url>
-			<organization>ISSCM SB RAS</organization>
-			<organizationUrl>http://www.solid.nsc.ru/</organizationUrl>
-			<roles>
-				<role>researcher</role>
-			</roles>
-			<timezone>6</timezone>
-		</developer>
+        <developer>
+            <id>anotherche</id>
+            <name>Stanislav Chizhik</name>
+            <url>http://www.solid.nsc.ru/</url>
+            <roles>
+                <role>lead</role>
+                <role>developer</role>
+                <role>debugger</role>
+                <role>reviewer</role>
+                <role>support</role>
+                <role>maintainer</role>
+            </roles>
+        </developer>
 	</developers>
+	
+	<contributors>
+		<contributor>
+            <name>Anatoly Sidelnikov</name>
+	</contributor>
+	</contributors>
+	
+	
+
+	
 
 	<scm>
 		<connection>scm:git:git://github.com/anotherche/photobend.git</connection>
@@ -50,7 +82,10 @@
 	</scm>
 
 	<properties>
+		<package-name>Bending_Crystal_Track</package-name>
 		<main-class>cvBending_Crystal_Track</main-class>
+		<license.licenseName>gpl</license.licenseName>
+		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
 	</properties>
 
 	<dependencies>
@@ -134,7 +169,7 @@
 
    				
    			</exclusions>
-   			<version>1.3</version>
+   			<version>1.3.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
@@ -168,12 +203,10 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-release-plugin</artifactId>
-				<version>2.5.3</version>
 			</plugin>
 			<plugin>
 		        <groupId>org.codehaus.mojo</groupId>
 		        <artifactId>buildnumber-maven-plugin</artifactId>
-		        <version>1.4</version>
 		        <executions>
 		          <execution>
 		          	<id>useLastCommittedRevision</id>
