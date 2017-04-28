@@ -4,7 +4,9 @@ Photobending is a phenomenon of crystal deformation caused by non-uniform
 crystal structure transformation due to photochemical reaction. 
 
 Required input is a stack of timelapse images taken during a photobending process.
-The output is the time dependence of crystal's curvature and longotudinal deformation.
+The output is the time dependence of crystal's curvature and longitudinal deformation.
+See details at http://imagej.net/PhotoBend
+
 The project uses ideas and code of 
 1. Template Matching by Qingzong Tseng (based on opencv)
 2. javacv (java interface to OpenCV) by Samuel Audet 

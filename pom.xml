@@ -18,7 +18,7 @@
 
 	<name>plugins/Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
-	<url>http://sites.imagej.net/Anotherche/plugins/</url>
+	<url>http://imagej.net/PhotoBend</url>
 	<inceptionYear>2017</inceptionYear>
 	 <organization>
         <name>ISSCM SB RAS</name>
@@ -28,7 +28,7 @@
 	<licenses>
 		<license>
 			<name>GNU General Public License</name>
-			<url>http://www.gnu.org/licenses/gpl.html</url>
+			<url>http://www.gnu.org/licenses/gpl.txt</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -42,7 +42,7 @@
 	
 	<issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/anotherche/laser-spot-track/issues</url>
+        <url>https://github.com/anotherche/photobend/issues</url>
     </issueManagement>
     <ciManagement>
         <system>None</system>
