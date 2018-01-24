@@ -8,15 +8,15 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>14.0.0</version>
+		<version>19.0.0</version>
 	<relativePath />
 	</parent>
 
-	<groupId>anotherche.photobend</groupId> 
+	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Bending_Crystal_Track</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
-
-	<name>plugins/Bending_Crystal_Track.jar</name>
+    <version>0.2.0-SNAPSHOT</version>
+	
+	<name>Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
 	<url>http://imagej.net/PhotoBend</url>
 	<inceptionYear>2017</inceptionYear>
@@ -82,23 +82,32 @@
 	</scm>
 
 	<properties>
-		<package-name>Bending_Crystal_Track</package-name>
-		<main-class>cvBending_Crystal_Track</main-class>
+		<package-name>bending_crystal_track</package-name>
+		<main-class>Bending_Crystal_Track</main-class>
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
+		<imagej-maven-plugin.version>0.7.0</imagej-maven-plugin.version>
+		<imagej.app.subdirectory>plugins/PhotoBend</imagej.app.subdirectory>
+		<imagej.ignoreDependencies>true</imagej.ignoreDependencies>
+		
 	</properties>
 
+	<repositories>
+		<repository>
+			<id>imagej.public</id>
+			<url>http://maven.imagej.net/content/groups/public</url>
+		</repository>
+	</repositories>
+
+
 	<dependencies>
-		<dependency>
-  			<groupId>net.imagej</groupId>
-  			<artifactId>ij</artifactId>
-  		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.bytedeco/javacv -->
 		<dependency>
     		<groupId>org.bytedeco</groupId>
    			<artifactId>javacv-platform</artifactId>
+   			
+   			
    			<exclusions>
-   				
    				<exclusion>
    					<groupId>org.bytedeco.javacpp-presets</groupId>
    					<artifactId>flycapture</artifactId>
@@ -120,11 +129,6 @@
    				<exclusion>
    					<groupId>org.bytedeco.javacpp-presets</groupId>
    					<artifactId>flandmark</artifactId>
-   				</exclusion>
-   				
-   				<exclusion>
-   					<groupId>org.bytedeco.javacpp-presets</groupId>
-   					<artifactId>ffmpeg-platform</artifactId>
    				</exclusion>
    				<exclusion>
    					<groupId>org.bytedeco.javacpp-presets</groupId>
@@ -156,10 +160,6 @@
    				</exclusion>
    				<exclusion>
    					<groupId>org.bytedeco.javacpp-presets</groupId>
-   					<artifactId>ffmpeg</artifactId>
-   				</exclusion>
-   				<exclusion>
-   					<groupId>org.bytedeco.javacpp-presets</groupId>
    					<artifactId>libfreenect</artifactId>
    				</exclusion>
    				<exclusion>
@@ -167,30 +167,79 @@
    					<artifactId>librealsense</artifactId>
    				</exclusion>
 
-   				
+
+   				<exclusion>
+   					<groupId>org.bytedeco.javacpp-presets</groupId>
+   					<artifactId>libfreenect2</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco.javacpp-presets</groupId>
+   					<artifactId>libfreenect2-platform</artifactId>
+   				</exclusion>
+
+   				<exclusion>
+   					<groupId>org.bytedeco.javacpp-presets</groupId>
+   					<artifactId>ffmpeg</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco.javacpp-presets</groupId>
+   					<artifactId>ffmpeg-platform</artifactId>
+   				</exclusion>
    			</exclusions>
-   			<version>1.3.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
 			<artifactId>metadata-extractor</artifactId>
-			<version>2.9.1</version>
 		</dependency>
 		<dependency>
- 			 <groupId>joda-time</groupId>
-  			 <artifactId>joda-time</artifactId>
+			<groupId>net.imagej</groupId>
+			<artifactId>ij</artifactId>
 		</dependency>
 	</dependencies>
 
 	<build>
 		
 		<plugins>
+		
+			<plugin>
+	        <groupId>net.imagej</groupId>
+	        <artifactId>imagej-maven-plugin</artifactId>
+	        <version>0.7.0</version>
+	        <executions>
+	          <execution>
+	            <id>copy-jars</id>
+	            <phase>install</phase>
+	            <goals>
+	              <goal>copy-jars</goal>
+	            </goals>
+	            <configuration>
+	              <imagej.app.subdirectory>plugins/PhotoBend</imagej.app.subdirectory>
+	              
+	              <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
+<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
+	            </configuration>
+	          </execution>
+	          
+
+	          
+	          
+	        </executions>
+	        <configuration>
+	          <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
+<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
+	        </configuration>
+	      	</plugin>
+	     
+		
 			<plugin>
 				<artifactId>maven-jar-plugin</artifactId>
 				<configuration>
 					<connectionType>developerConnection</connectionType>
 					<archive>
 						<manifest>
+							<!-- My Classpath customization in the next two lines 
+							<addClasspath>true</addClasspath>
+                			<classpathPrefix>lib/</classpathPrefix>  -->
 							<mainClass>${main-class}</mainClass>
 							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
 						</manifest>
@@ -203,6 +252,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-release-plugin</artifactId>
+				
 			</plugin>
 			<plugin>
 		        <groupId>org.codehaus.mojo</groupId>
@@ -228,4 +278,18 @@
 		</plugins>
 	</build>
 
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.bytedeco</groupId>
+				<artifactId>javacv-platform</artifactId>
+				<version>1.3.2</version>
+			</dependency>
+			<dependency>
+				<groupId>com.drewnoakes</groupId>
+				<artifactId>metadata-extractor</artifactId>
+				<version>2.11.0</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 </project>

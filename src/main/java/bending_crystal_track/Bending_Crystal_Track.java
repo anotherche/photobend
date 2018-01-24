@@ -1,20 +1,27 @@
-package Bending_Crystal_Track;
+package bending_crystal_track;
 
 import ij.*;
 import ij.process.*;
+import javafx.embed.swing.SwingFXUtils;
+import javafx.scene.image.Image;
 import ij.gui.*;
 import ij.io.*;
+
 import java.io.*;
+import java.time.Duration;
 //import java.util.*;
+import java.time.Instant;
 
 //import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
+import org.bytedeco.javacv.FFmpegFrameGrabber;
+import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.OpenCVFrameConverter;
 //import org.bytedeco.javacv.OpenCVFrameConverter.ToIplImage;
 import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
-import org.joda.time.DateTime;
-import org.joda.time.Duration;
+//import org.joda.time.DateTime;
+//import org.joda.time.Duration;
 
 
 import com.drew.imaging.ImageMetadataReader;
@@ -22,8 +29,13 @@ import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 
-import java.awt.*;
+//import ffmpeg_video_import.FFmpeg_FrameReader;
 
+
+
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 
 import ij.plugin.FolderOpener;
 //import ij.plugin.*;
@@ -32,7 +44,8 @@ import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
 //import java.nio.FloatBuffer;
 import java.util.ArrayList;
-
+import java.util.HashSet;
+import java.util.Set;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -60,8 +73,18 @@ The project uses ideas and code of
 
 
 
-public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
+public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 
+	
+	
+	private static final Set<String> videoTypes = new HashSet<String>(java.util.Arrays.asList(
+		     new String[] {"WEBM", "MKV", "VOB", "OGV", "OGG", "DRC", "MNG", "AVI", 
+		    		 "MOV", "QT", "WMV", "YUV", "RM", "RMVB", "ASF", "AMV", "MP4", 
+		    		 "M4P", "MPG", "MP2", "MPEG", "MPE", "MPV", "MPG", "MPEG", "M2V", 
+		    		 "M4V", "SVI", "3GP", "3G2", "MXF", "ROQ", "NSV", "FLV", "F4V", 
+		    		 "F4P", "F4A", "F4B" }
+		));
+	
     ImagePlus imp, ref_Image, refImageBinary, free_ref, free_tpl, holder_ref, mid_ref, mid_tpl;
 
     GaussianBlur gaussianBlur;
@@ -71,8 +94,10 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     PointRoi proi_free,proi_att,proi_mid;
     int method=5, refSlice, sArea = 20, templSize=300;
     double seconds=0, timeStep=1.0;
-    DateTime first_shot_time; 
-    int width, height, refBitDepth, refX_free, refY_free, refX_att, refY_att, refX_mid, refY_mid;
+    Instant first_shot_time; 
+    int width, height, refBitDepth;//, refX_free, refY_free, refX_att, refY_att, refX_mid, refY_mid;
+    double refX_free, refY_free, refX_att, refY_att, refX_mid, refY_mid;
+    double freeRefCenterShiftX, freeRefCenterShiftY, midRefCenterShiftX, midRefCenterShiftY;
     double disX_free, disY_free, disX_holder, disY_holder, disX_mid, disY_mid, rotAngle, disX_holder_save=0.0, disY_holder_save=0.0;
     double length_ini=0.0, cr_length, hord_ini,
     	   curvature_ini, curvature, 
@@ -87,8 +112,14 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     double free_mideal, att_mideal, mid_mideal;
     
     ImagePlus plotImage, plotDefImage;
-    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true;
+    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, saveFlatten=false, videoInput=false, stopPlugin=false,
+    		useTimeStamps=true;
     volatile WaitForUserDialog StopDlg=null, MonitorDlg=null;
+    
+    // For movie sequence
+    int movieFrameNum=0, previousFrameNum=0;
+    double impliedFrameRate;
+    ImagePlus prevMovieFrame;
     
     
     
@@ -103,6 +134,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 	Roi mid_refCropRoi = null;
 	double[] matchThreshold=new double[]{0.1, 0.1, 0.05, 0.05, 0.2, 0.2};
 	ImageWindow imgWindow;
+	Font fontParamInfo;
 	
 
 
@@ -127,9 +159,9 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             return false;
         }
         
-        double std_length = (int) gd.getNextNumber();
-        refX_att = refX_free + (int)(std_length*(refX_att - refX_free)/length_ini);
-        refY_att = refY_free + (int)(std_length*(refY_att - refY_free)/length_ini);
+        double std_length = gd.getNextNumber();
+        refX_att = refX_free + (std_length*(refX_att - refX_free)/length_ini);
+        refY_att = refY_free + (std_length*(refY_att - refY_free)/length_ini);
         H0_x=refX_free-refX_att;
         H0_y=refY_free-refY_att;
         length_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
@@ -146,22 +178,265 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 	}
 	
     public int setup(String arg, ImagePlus imp) {
-        this.imp = imp;
+    	
+    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+    	GenericDialog pluginMode = new GenericDialog("Bending Crystal Track");
+    	pluginMode.addMessage("Choose from the image source type - video (experimental) or time lapse series");
+    	String[] sourceTypes = new String[]{"Time lapse series", "Video file"};
+    	pluginMode.addRadioButtonGroup("Source Type", sourceTypes, 2, 1, "Time lapse series");
+    	pluginMode.showDialog();
+        if (pluginMode.wasCanceled()) {
+        	stopPlugin=true;
+            return returnMask;
+        }
+        videoInput = pluginMode.getNextRadioButton().equalsIgnoreCase("Video file");
+        int openImpCount = WindowManager.getWindowCount();
+        if (videoInput) {
+        	
+//        	JFileChooser fc = new JFileChooser();
+//        	int returnVal = fc.showOpenDialog(null);
+        	
+        	String[] videoSources = new String[openImpCount];
+        	
+        	int[] vID = new int[openImpCount];
+        	int videoCount=0;
+        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
+        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
+        		
+
+        		if (openImp.getStack()!=null 
+        				&& openImp.getStack().getSize()>1 
+        				&& openImp.getProperty("stack_source_type")!=null
+        				&& openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")){
+        			videoSources[videoCount] = openImp.getTitle();
+        			vID[videoCount++]=openImp.getID();
+        		}
+        		
+        	}
+        	
+        	if (videoCount>0){
+        		String[] videoSourcesCut = new String[videoCount];
+            	int[] vIDCut = new int[videoCount];
+            	for (int cnt=0; cnt<videoCount; cnt++){
+            		videoSourcesCut[cnt]=videoSources[cnt];
+            		vIDCut[cnt]=vID[cnt];
+            	}
+            	if (openImpCount==1){
+            		this.imp = WindowManager.getImage(vIDCut[0]);
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+            	}
+        		GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        		gd.addMessage("Select the video stack or press Cancel to open another video");
+        		gd.addChoice("List of open video stacks", videoSourcesCut, videoSourcesCut[0]);
+        		gd.showDialog();
+    			if (!gd.wasCanceled()) {
+    				this.imp = WindowManager.getImage(vIDCut[gd.getNextChoiceIndex()]);
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+    			}
+        	} 
+
+        		OpenDialog	od = new OpenDialog("Open Video File", "");
+
+
+        		if (od.getFileName() != null) {
+        			//File file = fc.getSelectedFile();
+        			//        		String filePath = fc.getSelectedFile().getPath();
+        			//        		String fileName = fc.getSelectedFile().getName();
+        			String fileName = od.getFileName();
+        			String filePath = od.getPath();
+        			
+
+        			IJ.run("Using FFmpeg...", "open=["+filePath+"] openquiet=true");
+        			this.imp = WindowManager.getCurrentImage();
+        			 
+        			//this.imp = new ImagePlus();
+//        			FFmpeg_FrameReader videoStack = new FFmpeg_FrameReader(filePath);
+//        			this.imp = videoStack.getImagePlus();//new ImagePlus(WindowManager.makeUniqueName(fileName), videoStack);
+//        			this.imp.setSlice(1);
+//        			this.imp.show();
+
+
+        		} else {
+        			stopPlugin=true;
+        			return returnMask;
+        		}
+        	
+        	
+        } else {
+        	//this.imp = imp;
+        	
+        	String[] seqSources = new String[openImpCount];
+        	
+        	int[] IDs = new int[openImpCount];
+        	int seqCount=0;
+        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
+        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
+        		
+
+        		if (openImp.getStack()!=null 
+        				&& openImp.getStack().getSize()>1 
+        				&& openImp.getStack().isVirtual()
+        				&& (openImp.getProperty("stack_source_type")==null ||
+        				     (openImp.getProperty("stack_source_type")!=null &&
+        				     !openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")))){
+        			seqSources[seqCount] = openImp.getTitle();
+        			IDs[seqCount++]=openImp.getID();
+        		}
+        		
+        	}
+        	if (seqCount>0){
+        		String[] seqSourcesCut = new String[seqCount];
+            	int[] IDsCut = new int[seqCount];
+            	for (int cnt=0; cnt<seqCount; cnt++){
+            		seqSourcesCut[cnt]=seqSources[cnt];
+            		IDsCut[cnt]=IDs[cnt];
+            	}
+            	if (openImpCount==1){
+            		this.imp = WindowManager.getImage(IDsCut[0]);
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				return returnMask;
+            	}
+        		GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        		gd.addMessage("Select image sequence stack or press Cancel to open another stack");
+        		gd.addChoice("List of open virtual stacks", seqSourcesCut, seqSourcesCut[0]);
+        		gd.showDialog();
+    			if (!gd.wasCanceled()) {
+    				this.imp = WindowManager.getImage(IDsCut[gd.getNextChoiceIndex()]);
+    				WindowManager.setCurrentWindow(this.imp.getWindow());
+    				
+    				return returnMask;
+    			}
+        	} 
+        	
+        	
+        	
+        		OpenDialog	od = new OpenDialog("Select first file in the sequence", "");
+
+
+        		if (od.getFileName() != null) {
+        			
+        			String sequencePath = od.getPath();
+        			String firstFileName = od.getFileName();
+        			String extension = "";
+        			int i = firstFileName.lastIndexOf('.');
+        			if (i > 0 && i < firstFileName.length() - 1) {
+        			    extension = firstFileName.substring(i+1);
+        			    if (videoTypes.contains(extension.toUpperCase())) {
+        			    	IJ.showMessage("Error", "It seems that a video file is selected instead of image file.");
+        			    	stopPlugin=true;
+                			return returnMask;
+        			    }
+        			} else {
+            			stopPlugin=true;
+            			return returnMask;
+            		}
+        			File[] fileList = (new File(od.getDirectory())).listFiles();
+        			//String[] tmplist = new String[fileList.length];
+	            	
+	            	
+	            	int listIter=0, firstFile=-1;
+	            	for (i = 0; i < fileList.length; i++){
+	            		if (fileList[i].isFile() && fileList[i].getName().contains(extension)){
+	            			listIter++;
+	            			if (fileList[i].getName().equals(firstFileName)) {
+	            				firstFile=listIter;
+	            				break;
+	            			}
+	            			
+	            		}
+	            	}
+	            	if (firstFile==-1) {
+	        			stopPlugin=true;
+	        			return returnMask;
+	        		}
+        			IJ.run("Image Sequence...", "open=["+sequencePath+"] starting="+firstFile+" file="+extension+" sort use");
+        			this.imp = IJ.getImage();
+        			FileInfo fi = new FileInfo();
+        			fi.fileName = firstFileName;
+        			fi.directory = od.getDirectory();
+        			
+        			this.imp.setFileInfo(fi);
+        			
+        		} else {
+        			stopPlugin=true;
+        			return returnMask;
+        		}
+        		
+
+        	
+        }
         
-        return DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+        return returnMask;
     }
 
     
 	public void run(ImageProcessor ip) {
 
+		if (stopPlugin) {
+			IJ.showMessage("Error", "No source chosen. Stopping.");
+			return;
+		}
 		
+		
+		
+		fontParamInfo =  new Font("Arial", Font.BOLD, 40);
 		imgWindow=imp.getWindow();
 		
         stack = imp.getStack();
-        if (!stack.isVirtual()) {
-        	IJ.showMessage("Error", "only virtual stacks are supported");
+        
+        if (stack.size()<2)  {
+        	IJ.showMessage("Error", "There is only 1 slice in the stack.\nNothing to track.");
             return;
         }
+        
+        if (!videoInput && !stack.isVirtual()) {
+        	IJ.showMessage("Error", "Only virtual stacks are supported");
+            return;
+        }
+        
+        if (videoInput){
+        	
+        	boolean fpsDetected=true;
+        	if (imp.getProperty("video_fps")!=null){
+        		impliedFrameRate=Double.parseDouble(imp.getProperty("video_fps").toString());//((FFmpeg_FrameReader)stack).getFrameRate();
+        	} else {
+        		impliedFrameRate=1.0;
+        		fpsDetected=false;
+        	}
+        	GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        	gd.addMessage("Please chose the method of getting the timestamp info\n"
+        			+ "\"Frame timestapm\" (default) is useful in case of variable frame rate;\n"
+        			+ "\"Calculate from frame rate\" works with constant frame rate video and allows to change the frame rate value.");
+        	gd.addRadioButtonGroup("Timestamp source", new String[]{"Frame timestapm", "Calculate from frame rate"}, 2, 1, "Frame timestapm");
+        	String fps_detected = String.format("%.3f", impliedFrameRate);
+        	if (fpsDetected){
+        		gd.addMessage("Frame rate of the video is determined as: "+ fps_detected + " fps.\n"
+        			+ "You may redefine the frame rate beneath.");
+        	} else {
+        		gd.addMessage("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"+
+        	"Frame rate of the video cannot be determined. It is arbitrarily set to 1 fps\n"
+            			+ "You may redefine the frame rate beneath.\n"+
+        				  "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        	}
+        	gd.addNumericField("Change frame rate to", impliedFrameRate, 3);
+
+        	gd.showDialog();
+        	if (gd.wasCanceled()) {
+        		IJ.showMessage("Plugin is canceled.");
+        		return;
+        	}
+
+        	useTimeStamps=gd.getNextRadioButton().equalsIgnoreCase("Frame timestapm");
+        	impliedFrameRate = gd.getNextNumber();
+        	if (!useTimeStamps && (impliedFrameRate==Double.NaN || impliedFrameRate<=0)){
+        		IJ.showMessage("Wrong frame rate specified. Stopping plugin.");
+        		return;
+        	}
+        }
+        
+        
 		curv_list = new ArrayList<Double>();
         deform_list = new ArrayList<Double>();
         time_list = new ArrayList<Double>();
@@ -185,6 +460,12 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		disX_mid=0.0;
 		disY_mid=0.0;
 		Overlay ov;
+//		Overlay ini_ov = imp.getOverlay();
+//		if (ini_ov!=null) {
+//			ini_ov.clear();
+//			imp.setOverlay(ini_ov);
+//		}
+		
 
             if (!getUserParameters()) { return;
             }
@@ -194,6 +475,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             
             refSlice = imp.getCurrentSlice();
             ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
+            
             refImageBinary = ref_Image.duplicate();
             IJ.run(refImageBinary, "Make Binary", "");
             IJ.run(refImageBinary, "Open", "");
@@ -202,21 +484,23 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             IJ.run(refImageBinary, "Find Edges", "");
             IJ.run(refImageBinary, "Invert", "");
             
+            imp.killRoi();
             
             IJ.setTool("point");
             new WaitForUserDialog("Bending_Crystal_Track", "Select a point on the FREE needle's end...\nthen press OK.").show();
             
             proi_free = (PointRoi)imp.getRoi();
             if (proi_free!=null) {
-            refX_free=proi_free.getPolygon().xpoints[0];
-            refY_free=proi_free.getPolygon().ypoints[0];
+            refX_free=proi_free.getFloatPolygon().xpoints[0];
+            refY_free=proi_free.getFloatPolygon().ypoints[0];
+            
             } else {
             	IJ.showMessage("Error", "point ROI needed");
                 return;
             }
             
-            int d1 = refX_free, d2 = width - refX_free, d3 = refY_free, d4 = height - refY_free;
-            int dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
+            double d1 = refX_free, d2 = width - refX_free, d3 = refY_free, d4 = height - refY_free;
+            double dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
             if (dmin<=sArea+1)
             {
             	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
@@ -242,8 +526,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             
             proi_att = (PointRoi)imp.getRoi();
             if (proi_att!=null) {
-            refX_att=proi_att.getPolygon().xpoints[0];
-            refY_att=proi_att.getPolygon().ypoints[0];
+            refX_att=proi_att.getFloatPolygon().xpoints[0];
+            refY_att=proi_att.getFloatPolygon().ypoints[0];
             } else {
             	IJ.showMessage("Error", "point ROI needed");
                 return;
@@ -310,8 +594,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
                  
                  proi_mid = (PointRoi)imp.getRoi();
                  if (proi_mid!=null) {
-                 refX_mid=proi_mid.getPolygon().xpoints[0];
-                 refY_mid=proi_mid.getPolygon().ypoints[0];
+                 refX_mid=proi_mid.getFloatPolygon().xpoints[0];
+                 refY_mid=proi_mid.getFloatPolygon().ypoints[0];
                  } else {
                  	IJ.showMessage("Error", "point ROI needed");
                      return;
@@ -347,6 +631,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             holder_roi=imp.getRoi();
             if (holder_roi != null && holder_roi.isArea()) {
                 holder_rect = holder_roi.getBounds();
+                imp.killRoi();
+                holder_roi = new Roi(holder_rect);
                 
 				
                 
@@ -358,6 +644,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             ov.addElement(holder_roi);
             imp.setOverlay(ov);
             
+            ref_Image.killRoi();
             ref_Image.setRoi(holder_roi);
             holder_ref=ref_Image.crop();
             if (matchIntensity) {
@@ -370,18 +657,32 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
             
             
+            ImagePlus tmp_Ip;
+            if (refBitDepth==24 && !matchIntensity) {
+ 				tmp_Ip = holder_ref.duplicate();
+ 				ImageConverter ic = new ImageConverter(tmp_Ip);
+            	ic.convertToGray32();
+ 			} else tmp_Ip=holder_ref;
+			ImageRoi imageRoi_att = new ImageRoi(holder_rect.x, holder_rect.y,tmp_Ip.getProcessor());
+	        imageRoi_att.setOpacity(0.3);
+	        ov.addElement(imageRoi_att);
+	        imp.setOverlay(ov);
            
            
              
             free_roi=new Roi(refX_free-rect_half_size,refY_free-rect_half_size,2*rect_half_size,2*rect_half_size);
-            ref_Image.setRoi(free_roi);
-            
             free_rect = free_roi.getBounds();
-            free_rect.x+=(int)(free_rect.width*0.15);
-            free_rect.y+=(int)(free_rect.height*0.15);
-            free_rect.width=(int)(free_rect.width*0.7);
-            free_rect.height=(int)(free_rect.height*0.7);
             
+            
+            
+            free_roi=new Roi(free_rect);
+            
+            freeRefCenterShiftX = refX_free - free_rect.x - (free_rect.width - 1)/2.0;
+            freeRefCenterShiftY = refY_free - free_rect.y - (free_rect.height - 1)/2.0;
+            
+            
+            ref_Image.killRoi();
+            ref_Image.setRoi(free_roi);
             free_ref = ref_Image.crop();
             if (matchIntensity) {
             	ImageConverter ic = new ImageConverter(free_ref);
@@ -390,10 +691,28 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             
             ip_tmp=free_ref.getProcessor();
             gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+
+            free_rect.x+=(int)(free_rect.width*0.15);
+            free_rect.y+=(int)(free_rect.height*0.15);
+            free_rect.width=(int)(free_rect.width*0.7);
+            free_rect.height=(int)(free_rect.height*0.7);
             refCropRoi =  new Roi((int)(free_ref.getWidth()*0.15), (int)(free_ref.getHeight()*0.15), 
-            							(int)(free_ref.getWidth()*0.7), (int)(free_ref.getHeight()*0.7));
-		
-		
+					(int)(free_ref.getWidth()*0.7), (int)(free_ref.getHeight()*0.7));
+           
+            tmp_Ip = free_ref.duplicate();
+			tmp_Ip.setRoi(refCropRoi);
+			tmp_Ip = tmp_Ip.crop();
+            if (refBitDepth==24 && !matchIntensity) {
+ 				
+ 				ImageConverter ic = new ImageConverter(tmp_Ip);
+            	ic.convertToGray32();
+ 			} 
+			imageRoi_att = new ImageRoi(free_rect.x, free_rect.y,tmp_Ip.getProcessor());
+	        imageRoi_att.setOpacity(0.3);
+	        ov.addElement(imageRoi_att);
+	        imp.setOverlay(ov);
+            
+            
             d1 = refX_mid;
             d2 = width - refX_mid;
             d3 = refY_mid;
@@ -413,9 +732,18 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             }
             
             middle_roi=new Roi(refX_mid-rect_half_size,refY_mid-rect_half_size,2*rect_half_size,2*rect_half_size);
+            mid_rect = middle_roi.getBounds();
+            middle_roi=new Roi(mid_rect);
+            
+            midRefCenterShiftX = refX_mid -  mid_rect.x - ( mid_rect.width - 1)/2.0 ;
+            midRefCenterShiftY = refY_mid -  mid_rect.y - ( mid_rect.height - 1)/2.0;
+            
+            
+            
+            ref_Image.killRoi();
             ref_Image.setRoi(middle_roi);
             
-            mid_rect = middle_roi.getBounds();
+
             mid_rect.x+=(int)(mid_rect.width*0.15);
             mid_rect.y+=(int)(mid_rect.height*0.15);
             mid_rect.width=(int)(mid_rect.width*0.7);
@@ -434,6 +762,36 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
             						  (int)(mid_ref.getWidth()*0.7), 
             						  (int)(mid_ref.getHeight()*0.7));
 
+            
+            
+            tmp_Ip = mid_ref.duplicate();
+			tmp_Ip.setRoi(mid_refCropRoi);
+			tmp_Ip = tmp_Ip.crop();
+            if (refBitDepth==24 && !matchIntensity) {
+ 				
+ 				ImageConverter ic = new ImageConverter(tmp_Ip);
+            	ic.convertToGray32();
+ 			} 
+			imageRoi_att = new ImageRoi(mid_rect.x, mid_rect.y,tmp_Ip.getProcessor());
+	        imageRoi_att.setOpacity(0.3);
+	        ov.addElement(imageRoi_att);
+	        imp.setOverlay(ov);
+            
+	        ImageRoi ref_ImageRoi = new ImageRoi(0, 0,refImageBinary.getProcessor());
+	        ref_ImageRoi.setOpacity(0.3);
+	        ov.addElement(imageRoi_att);
+	        imp.setOverlay(ov);
+            
+            
+            if (JOptionPane.showConfirmDialog(null, "Everything is ready.\nPress OK to start.", 
+					"Bending_Crystal_Track", JOptionPane.OK_CANCEL_OPTION)==JOptionPane.CANCEL_OPTION) 
+            	{
+            		
+            		imp.killRoi();
+            		ov.clear();
+            		imp.setOverlay(ov);
+            		return;
+            	}
 
         if (showRT) {
             
@@ -457,11 +815,25 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         }
         
         
-        FileInfo fi = imp.getOriginalFileInfo();
-        String directory = fi.directory;
-        String name = stack.getSliceLabel(refSlice);
-        first_shot_time = getShotTime(directory + name);
+        FileInfo fi = null;
+        String directory = "";
+        String name = "";
+        
+        if(!videoInput){
+        	fi = imp.getOriginalFileInfo();
+        	directory = fi.directory;
+        	name = stack.getSliceLabel(refSlice);
+        }
+        
+        
+        first_shot_time = getShotTime(directory + name, refSlice);
     	if (first_shot_time==null) ExifTime=false;
+    	
+    	if (saveFlatten) {
+    		
+    		
+			prevMovieFrame = new ImagePlus("",imp.flatten().getProcessor().resize(720));
+		}
 		
 		
 		
@@ -470,7 +842,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		if (showRT) {
             rt.incrementCounter();
             rt.addValue("Time", 0);
-            rt.addValue("File", stack.getSliceLabel(refSlice));
+            if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(refSlice).replaceAll(" ", ""));
+            else rt.addValue("File", stack.getSliceLabel(refSlice));
             
 			rt.addValue("bendAngle", bending_angle_ini);
 			rt.addValue("defAngle", deflection_angle_ini);
@@ -529,20 +902,31 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {     //align slices after reference slice.
         	
         	if (!StopThread.isAlive()) {
+        		if (saveFlatten){
+                	
+                	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+                }
         		new WaitForUserDialog("Bending Crystal Track", "The track is finished.").show();
+        		
         		return;
         	}
-        	
-        	Opener opener = new Opener();  
-			String imageFilePath = directory+stack.getSliceLabel(i);
+        	Opener opener=null;  
+			String imageFilePath="";
 			
-			ImagePlus imp_new = opener.openImage(imageFilePath);
+			ImagePlus imp_new=null;
         	
-			if ((new File(imageFilePath)).isFile() 
+			if (!videoInput){
+				opener = new Opener();  
+				imageFilePath = directory+stack.getSliceLabel(i);
+
+				imp_new = opener.openImage(imageFilePath);
+			}
+        	
+			if (videoInput || ((new File(imageFilePath)).isFile() 
 					&& imp_new!=null 
 					&& imp_new.getWidth()==width 
 					&& imp_new.getHeight()==height 
-					&& imp_new.getBitDepth()==refBitDepth){
+					&& imp_new.getBitDepth()==refBitDepth)){
 
 				
 					double  tmp_disX_free=disX_free,
@@ -551,7 +935,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 							tmp_disY_holder=disY_holder,
 							tmp_disX_mid=disX_mid,
 							tmp_disY_mid=disY_mid;
-				    int matchresult = analyseSlice(i, stack.getProcessor(i));
+				    int matchresult = analyzeSlice(i, stack.getProcessor(i));
 					if (matchresult==1) {
 							disX_free=tmp_disX_free;
 							disY_free=tmp_disY_free;
@@ -581,7 +965,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		            	rt.incrementCounter();
 		            	
 		                rt.addValue("Time", seconds);
-		                rt.addValue("File", stack.getSliceLabel(i));
+		                if (videoInput) rt.addValue("File", imp.getTitle() + ":" +stack.getSliceLabel(i).replaceAll(" ", ""));
+		                else rt.addValue("File", stack.getSliceLabel(i));
 		                
 		                rt.addValue("bendAngle", bending_angle);
 						rt.addValue("defAngle", deflection_angle);
@@ -651,12 +1036,25 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         }
         	
         
-       
+       if (videoInput){
+    	   if (saveFlatten){
+           	
+           	//saveFlattenFrames(((FFmpeg_FrameReader)stack).getDirectory() + "flatten"+File.separatorChar, 0, true);
+    		   saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+           }
+       	return;
+       }
         
         GenericDialog gd = new GenericDialog("Monitor for additional images");
         gd.addMessage("Do you want to check/monitor the folder for additional images?");
         gd.showDialog();
-        if (gd.wasCanceled()) return;
+        if (gd.wasCanceled()) {
+        	if (saveFlatten){
+            	
+            	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+            }
+        	return;
+        }
         
         
         Thread monitorThread = new Thread(new Runnable()
@@ -752,7 +1150,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 					            							tmp_disX_mid=disX_mid,
 					            							tmp_disY_mid=disY_mid;
 					            				    			            					
-					            					int matchresult = analyseSlice(vstack.getSize(),imp_new.getProcessor());
+					            					int matchresult = analyzeSlice(vstack.getSize(),imp_new.getProcessor());
 					            						
 					            						if (matchresult==1) {
 					            							disX_free=tmp_disX_free;
@@ -852,13 +1250,22 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 						}
 	            	}
 	        }
+	        if (saveFlatten){
+            	
+            	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+            }
         new WaitForUserDialog("Bending Crystal Tracking", "The tracking is finished.").show();
     }
 	
-	private DateTime getShotTime(String imageFilePath)
+	private Instant getShotTime(String imageFilePath, int videoSlice)
 	{
 		 // the creation time of the image is taken from the EXIF metadata
         
+		if (videoInput){
+			long timeStampMicroSec = Math.round(Double.parseDouble(stack.getSliceLabel(videoSlice).replaceAll(" s", ""))*1000000);// ((FFmpeg_FrameReader)stack).getFrameTimeStamp(videoSlice - 1);
+			if (useTimeStamps) return Instant.ofEpochSecond(0L, timeStampMicroSec*1000L);
+			else return Instant.ofEpochSecond(0L, Math.round(1000000000.0*(videoSlice - 1)/impliedFrameRate));
+		}
 	       
 		File jpegFile = new File(imageFilePath);
 		
@@ -867,7 +1274,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		try {
 			metadata = ImageMetadataReader.readMetadata(jpegFile);
 			ExifSubIFDDirectory md_directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
-		    return new DateTime(md_directory.getDateOriginal());
+		    return md_directory.getDateOriginal().toInstant();//new DateTime(md_directory.getDateOriginal());
 			
 		} catch (Exception e) {
 			setAltTimeMeasure();
@@ -983,7 +1390,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		return 2;
 	}
 
-    private int analyseSlice(int slice, ImageProcessor slice_proc) {
+    private int analyzeSlice(int slice, ImageProcessor slice_proc) {
 
  
         double[] coord_res = new double[3]; 
@@ -1252,6 +1659,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         
         disX_holder = coord_res[0] + xStart_holder - holder_rect.x;
         disY_holder = coord_res[1] + yStart_holder - holder_rect.y;
+        
         //// not working part of the template update code
         
         //if (updateTemplates)
@@ -1282,7 +1690,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     			// A copy of the template is rotated..
     			free_tpl = free_ref.duplicate();
       			ImageProcessor tpl_ip = free_tpl.getProcessor();
-    			tpl_ip.setInterpolationMethod(ImageProcessor.BILINEAR);
+    			tpl_ip.setInterpolationMethod(ImageProcessor.BICUBIC);
     			tpl_ip.rotate(angle);
     			free_tpl.setRoi(refCropRoi);
     			free_tpl=free_tpl.crop();
@@ -1352,7 +1760,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     	        	        overlay = new Overlay();
     	        	        overlay.addElement(imageRoi);
     	        			//imp.setSlice(slice);
-    	        			
+    	        	        //WaitForUserDialog dlg = new WaitForUserDialog("Not found", "angle = "+angle+"\nfull_angle = "+full_angle+"\nbending_angle = "+bending_angle+"\ninitial_angle = "+initial_angle+"\nideal res = "+free_mideal);
+    	        	        //dlg.show();
     	        			overlay.addElement(new Roi(xStart_free, yStart_free, sWX_free, sWY_free));
     	        			imp.setSlice(slice);
     	        			imp.setOverlay(overlay);
@@ -1381,6 +1790,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 	        	        overlay.addElement(imageRoi);
 	        			imp.setSlice(slice);
 	        			imp.setOverlay(overlay);
+	        			
 	    				int failureAnswer = failureQuestionDlg(1); 
 	    				if (failureAnswer==0) adjustThreshold(coord_res[2], free_mideal, method);
 	        			ignoreFrame = (failureAnswer==1);
@@ -1396,14 +1806,18 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     			
     			disX_free = coord_res[0] + xStart_free - free_rect.x;
                 disY_free = coord_res[1] + yStart_free - free_rect.y;
-    			
+                if (subPixel) {
+                	
+                	disX_free += freeRefCenterShiftX*(Math.cos(angle*Math.PI/180.0) - 1.0) + freeRefCenterShiftY*Math.sin(angle*Math.PI/180.0);
+                	disY_free += freeRefCenterShiftY*(Math.cos(angle*Math.PI/180.0) - 1.0) - freeRefCenterShiftX*Math.sin(angle*Math.PI/180.0);
+                }
 
             
             
             mid_tpl = mid_ref.duplicate();
 			
 			ImageProcessor mid_ip = mid_tpl.getProcessor();
-			mid_ip.setInterpolationMethod(ImageProcessor.BILINEAR);
+			mid_ip.setInterpolationMethod(ImageProcessor.BICUBIC);
 		
 			double H_x=refX_free+disX_free-(refX_att+disX_holder),
 		          	   H_y=refY_free+disY_free-(refY_att+disY_holder),
@@ -1528,8 +1942,10 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 	        	        overlay = new Overlay();
 	        	        overlay.addElement(imageRoi);
 	        			//imp.setSlice(slice);
-	        			
-	        			overlay.addElement(new Roi(xStart_mid, yStart_mid, sWX_mid, sWY_mid));
+	        			Roi rectroi = new Roi(xStart_mid, yStart_mid, sWX_mid, sWY_mid);
+	        			rectroi.setStrokeWidth(3);
+	        			rectroi.enableSubPixelResolution();
+	        			overlay.addElement(rectroi);
 	        			imp.setSlice(slice);
 	        			imp.setOverlay(overlay);
 	        			//IJ.showMessage("Not found in Area=" + sArea_new);
@@ -1578,6 +1994,12 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 			disX_mid = coord_res[0] + xStart_mid - mid_rect.x;
             disY_mid = coord_res[1] + yStart_mid - mid_rect.y;
             
+            if (subPixel) {
+            	
+            	disX_mid += midRefCenterShiftX*(Math.cos(-mid_angle*Math.PI/180.0) - 1.0) + midRefCenterShiftY*Math.sin(-mid_angle*Math.PI/180.0);
+            	disY_mid += midRefCenterShiftY*(Math.cos(-mid_angle*Math.PI/180.0) - 1.0) - midRefCenterShiftX*Math.sin(-mid_angle*Math.PI/180.0);
+            }
+            
             // current bending is computed and checked for the convergence
             calcBendingParams();
             if (Math.abs(disX_free-dxtmp)<1.0e-5 && Math.abs(disY_free-dytmp)<1.0e-5) break;
@@ -1591,9 +2013,11 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         
         if (ExifTime)
         {
-             DateTime shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice));
+        	Instant shot_time;
+        	if(videoInput) shot_time = getShotTime("", slice);
+        	else shot_time = getShotTime(imp.getOriginalFileInfo().directory + stack.getSliceLabel(slice), slice);
              
-        	if (shot_time!=null) seconds = (double)((new Duration(first_shot_time,shot_time)).getStandardSeconds());
+        	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(new Duration(first_shot_time,shot_time)).getMillis()/1000.0;
         	else 
         	{	
         		ExifTime=false;
@@ -1602,7 +2026,7 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         }
         else seconds+=timeStep;
 		
-		
+        //slice_proc.translate(disX_holder, disY_holder);
 		
         
 		// Supposed central line of the bent crystal is plotted
@@ -1614,11 +2038,13 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         	double ang=astep*bending_angle/10,
         			y=-(1.0-Math.cos(ang))/curvature,
         			x=Math.sin(ang)/curvature;
-        	xpf[astep]=refX_att+(float)disX_holder+(float)(Math.cos(deflection_angle)*x+Math.sin(deflection_angle)*y);
-        	ypf[astep]=refY_att+(float)disY_holder+(float)(-Math.sin(deflection_angle)*x+Math.cos(deflection_angle)*y);
+        	xpf[astep]=(float)(refX_att+disX_holder+Math.cos(deflection_angle)*x+Math.sin(deflection_angle)*y);
+        	ypf[astep]=(float)(refY_att+disY_holder-Math.sin(deflection_angle)*x+Math.cos(deflection_angle)*y);
         	
         }
         PolygonRoi needle_line=new PolygonRoi(xpf,ypf,Roi.FREELINE);
+        needle_line.setStrokeWidth(3);
+        needle_line.enableSubPixelResolution();
         
         if (refBitDepth==24 && !matchIntensity) {
 				tmpIp = free_tpl.duplicate();
@@ -1650,6 +2076,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 					        		refY_free + disY_free, 
 					        		refX_att + disX_holder, 
 					        		refY_att + disY_holder);
+        hord_line.setStrokeWidth(3);
+        hord_line.enableSubPixelResolution();
         overlay.addElement(hord_line);
         
         double x0 = (refX_free+disX_free+refX_att+disX_holder)/2.0,
@@ -1668,6 +2096,8 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 				y1 = y0 + dy*dh;
 
 		Line mid_line = new Line(x1, y1, x0, y0);
+		mid_line.setStrokeWidth(3);
+		mid_line.enableSubPixelResolution();
         overlay.addElement(mid_line);
         
         
@@ -1685,9 +2115,23 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         proi_att = new PointRoi(refX_att+disX_holder,refY_att+disY_holder);
         proi_att.setPointType(3);
         overlay.addElement(proi_att);
-        overlay.addElement(new Roi(xStart_holder, yStart_holder, sWX_holder, sWY_holder));
-        overlay.addElement(new Roi(xStart_mid, yStart_mid, sWX_mid, sWY_mid));
-        overlay.addElement(new Roi(xStart_free, yStart_free, sWX_free, sWY_free));
+        
+        Roi holderroi = new Roi(xStart_holder, yStart_holder, sWX_holder, sWY_holder);
+        holderroi.setStrokeWidth(3);
+        holderroi.enableSubPixelResolution();
+		overlay.addElement(holderroi);
+        
+		Roi midroi = new Roi(xStart_mid, yStart_mid, sWX_mid, sWY_mid);
+        midroi.setStrokeWidth(3);
+        midroi.enableSubPixelResolution();
+		overlay.addElement(midroi);
+		
+		Roi freeroi = new Roi(xStart_free, yStart_free, sWX_free, sWY_free);
+		freeroi.setStrokeWidth(3);
+		freeroi.enableSubPixelResolution();
+		overlay.addElement(freeroi);
+		
+       
         
         
         
@@ -1697,9 +2141,66 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         overlay.addElement(ref_ImageRoi);
         
         imp.setSlice(slice);
+        
         imp.setOverlay(overlay);
- 
+        
+        if (saveFlatten){
+        	//FileSaver flattenSave = new FileSaver(imp.flatten());
+        	FileInfo fi = imp.getOriginalFileInfo();
+        	String directory = fi.directory + "flatten"+File.separatorChar;
+        	saveFlattenFrames(directory, seconds, false);
+        }
         return 0;
+    }
+    
+    
+    private void saveFlattenFrames(String directory, double seconds, boolean lastFrame) {
+    	
+    	
+
+
+    	File theDir = new File(directory);
+
+    	// if the directory does not exist, create it
+    	if (!theDir.exists()) {
+
+
+    		try{
+    			theDir.mkdir();
+
+    		} 
+    		catch(SecurityException se){
+
+    		}        
+
+    	}
+
+    	if (theDir.exists()) {
+    		
+    		if (!lastFrame) {
+    			int frameNum = (int) Math.round(0.3*seconds);
+    			FileSaver prevFlatten = new FileSaver(prevMovieFrame);
+    			for (int frame_n=previousFrameNum; frame_n<frameNum; frame_n++) {
+    				String frName = String.format("IMG_%05d.JPG", frame_n);
+    				prevFlatten.saveAsJpeg(directory + frName);
+    			}
+    			
+    			ImagePlus flatten_img = imp.flatten();
+    			flatten_img.getProcessor().translate(-disX_holder, -disY_holder);
+    			String paramInfo = String.format("1/R  = %.2E 1/pixel\ndL/L = %.2f %%", curvature, deformation*100.0);
+    			TextRoi textoverlay = new TextRoi(50,50,paramInfo,fontParamInfo);
+    			Overlay ov = new Overlay();  
+    			ov.add(textoverlay);
+    			flatten_img.setOverlay(ov);
+    			
+    			prevMovieFrame = new ImagePlus("",flatten_img.flatten().getProcessor().resize(720));
+    			
+    			previousFrameNum = frameNum;
+    		} else {
+    			String frName = String.format("IMG_%05d.JPG", previousFrameNum);
+    			(new FileSaver(prevMovieFrame)).saveAsJpeg(directory + frName);
+    		}
+    	}
     }
     
     private void calcBendingParams() {
@@ -1724,7 +2225,10 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
     	 full_angle=Math.acos(cos_full_angle);
          if (H_y>0.0) full_angle=-full_angle;
      	
-     	bending_angle=2.0*sign*Math.acos((H*H-H1*H1-H2*H2)/2.0/H1/H2); 
+        double cos_half_bend=(H*H-H1*H1-H2*H2)/2.0/H1/H2;
+        if (cos_half_bend>=1.0) bending_angle=0.0;
+        else if (cos_half_bend<=-1.0) bending_angle=2.0*Math.PI;
+        else bending_angle=2.0*sign*Math.acos(cos_half_bend);
      	curvature=2.0*Math.sin(bending_angle/2.0)/H;
      	deflection_angle=full_angle-bending_angle/2.0;
      	if (curvature!=0.0) cr_length=Math.abs(bending_angle/curvature);
@@ -1738,22 +2242,61 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 	
     private boolean getUserParameters() {
 
-        String[] methods = {"Square difference", "Normalized square difference", "Cross correlation", "Normalized cross correlation", "Correlation coefficient", "Normalized correlation coefficient"};
+        //boolean showFlattenOption = false;
+    	
+    	method =  (int) Prefs.get("BendingCrystalTrack.method", 5);
+    	templSize=(int) Prefs.get("BendingCrystalTrack.templSize", 300);
+    	sArea =   (int) Prefs.get("BendingCrystalTrack.sArea", 20);
+    	subPixel =		Prefs.get("BendingCrystalTrack.subPixel", true);
+    	matchIntensity =Prefs.get("BendingCrystalTrack.matchIntensity", true);
+    	String[] methods = {"Square difference", "Normalized square difference", "Cross correlation", "Normalized cross correlation", "Correlation coefficient", "Normalized correlation coefficient"};
         //String[] itpMethods = {"Bilinear", "Bicubic"};
 
         GenericDialog gd = new GenericDialog("Bending Crystal Track");
         gd.addMessage("Only virtual stacks of time lapse images are supported currently.\n"
         		+ "Adjust the settings and follow the instructions to select templates to track.");
-        gd.addChoice("Matching method", methods, methods[5]);
-        gd.addNumericField("Template rectangle size (rectangle ROI size in pixels) ", 300, 0);
+        gd.addChoice("Matching method", methods, methods[method]);
+        gd.addNumericField("Template rectangle size (rectangle ROI size in pixels) ", templSize, 0);
         //gd.addMessage("(Template will be searched on the whole image if search area =0)");
-        gd.addNumericField("Search area(pixels around ROI) ", 20, 0);
+        gd.addNumericField("Search area(pixels around ROI) ", sArea, 0);
         gd.addMessage("(Template will be searched on the whole image if search area =0)");
-        gd.addCheckbox("Subpixel registration.", subPixel);
-        gd.addCheckbox("Match RGB images using intensity.", matchIntensity);
+        gd.addCheckbox("Subpixel registration", subPixel);
+        gd.addCheckbox("Match RGB images using intensity", matchIntensity);
+        //gd.addCheckbox("Save flatten copies of images with overlays", saveFlatten);
+       
         //gd.addChoice("Interpolation method for subpixel translation", itpMethods, itpMethods[itpMethod]);
        
         //gd.addCheckbox("update templates?", false);
+        
+        Component[] gd_components = gd.getComponents();
+        for (Component comp : gd_components)
+        comp.addKeyListener(new KeyListener(){  
+
+            @Override
+            public void keyTyped(KeyEvent e) {
+                
+            }
+
+            @Override
+            public void keyPressed(KeyEvent e) {
+            	
+            	 if (gd.getComponentCount()==11 && e.isControlDown() && e.getKeyCode() == KeyEvent.VK_T) {
+            		 //IJ.showMessage("Info", "pressed");
+            		 //GenericDialog d = (GenericDialog)e.getSource();
+            		 gd.addCheckbox("Save flatten copies of images with overlays", saveFlatten);
+            		 gd.validate();
+            		 gd.repaint();
+            		 gd.pack();
+            		 
+                 } 
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+                }
+            });     
+        
+        
         gd.showDialog();
         if (gd.wasCanceled()) {
             return false;
@@ -1763,6 +2306,14 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
         sArea = (int) gd.getNextNumber();
         subPixel = gd.getNextBoolean();
         matchIntensity  = gd.getNextBoolean();
+        if (gd.getComponentCount()==12) saveFlatten = gd.getNextBoolean();
+        
+        
+        Prefs.set("BendingCrystalTrack.method", method);
+    	Prefs.set("BendingCrystalTrack.templSize", templSize);
+    	Prefs.set("BendingCrystalTrack.sArea", sArea);
+    	Prefs.set("BendingCrystalTrack.subPixel", subPixel);
+    	Prefs.set("BendingCrystalTrack.matchIntensity", matchIntensity);
         //itpMethod = gd.getNextChoiceIndex();
         //updateTemplates = gd.getNextBoolean();
         showRT = true;
@@ -2064,5 +2615,9 @@ public class cvBending_Crystal_Track implements PlugInFilter, DialogListener {
 		
 		return true;
 	}
+	
+	
+	
+	
     
 }
