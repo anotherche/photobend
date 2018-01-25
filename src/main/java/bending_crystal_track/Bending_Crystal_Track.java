@@ -193,45 +193,39 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         int openImpCount = WindowManager.getWindowCount();
         if (videoInput) {
         	
-//        	JFileChooser fc = new JFileChooser();
-//        	int returnVal = fc.showOpenDialog(null);
-        	
-        	String[] videoSources = new String[openImpCount];
-        	
-        	int[] vID = new int[openImpCount];
+     	
+        	ArrayList<String> videoStacks = new ArrayList<String>(0);
+    		ArrayList<Integer> videoStackIDs = new ArrayList<Integer>(0);
+
         	int videoCount=0;
         	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
         		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
-        		
-
         		if (openImp.getStack()!=null 
         				&& openImp.getStack().getSize()>1 
-        				&& openImp.getProperty("stack_source_type")!=null
-        				&& openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")){
-        			videoSources[videoCount] = openImp.getTitle();
-        			vID[videoCount++]=openImp.getID();
+        				&& openImp.getStack().isVirtual()
+        				&& (openImp.getProperty("stack_source_type")!=null &&
+        				     openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber"))){
+        			videoStacks.add(openImp.getTitle());
+        			videoStackIDs.add(openImp.getID());
+        			videoCount++;
+
         		}
         		
         	}
         	
         	if (videoCount>0){
-        		String[] videoSourcesCut = new String[videoCount];
-            	int[] vIDCut = new int[videoCount];
-            	for (int cnt=0; cnt<videoCount; cnt++){
-            		videoSourcesCut[cnt]=videoSources[cnt];
-            		vIDCut[cnt]=vID[cnt];
-            	}
-            	if (openImpCount==1){
-            		this.imp = WindowManager.getImage(vIDCut[0]);
+
+            	if (videoCount==1){
+            		this.imp = WindowManager.getImage(videoStackIDs.get(0));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
             	}
         		GenericDialog gd = new GenericDialog("Bending Crystal Track");
         		gd.addMessage("Select the video stack or press Cancel to open another video");
-        		gd.addChoice("List of open video stacks", videoSourcesCut, videoSourcesCut[0]);
+        		gd.addChoice("List of open video stacks", videoStacks.toArray(new String[0]), videoStacks.get(0));
         		gd.showDialog();
     			if (!gd.wasCanceled()) {
-    				this.imp = WindowManager.getImage(vIDCut[gd.getNextChoiceIndex()]);
+    				this.imp = WindowManager.getImage(videoStackIDs.get(gd.getNextChoiceIndex()));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
     			}
@@ -250,13 +244,6 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 
         			IJ.run("Using FFmpeg...", "open=["+filePath+"] openquiet=true");
         			this.imp = WindowManager.getCurrentImage();
-        			 
-        			//this.imp = new ImagePlus();
-//        			FFmpeg_FrameReader videoStack = new FFmpeg_FrameReader(filePath);
-//        			this.imp = videoStack.getImagePlus();//new ImagePlus(WindowManager.makeUniqueName(fileName), videoStack);
-//        			this.imp.setSlice(1);
-//        			this.imp.show();
-
 
         		} else {
         			stopPlugin=true;
@@ -266,10 +253,24 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	
         } else {
         	//this.imp = imp;
-        	
-        	String[] seqSources = new String[openImpCount];
-        	
-        	int[] IDs = new int[openImpCount];
+        	ArrayList<String> imgStacks = new ArrayList<String>(0);
+    		ArrayList<Integer> imgStackIDs = new ArrayList<Integer>(0);
+
+//        	int stackCount=0;
+//        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
+//        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
+//        		if (openImp.getStack()!=null && openImp.getStack().getSize()>1){
+//        			videoStacks.add(openImp.getTitle());
+//        			videoStackIDs.add(openImp.getID());
+//        			videoCount++;
+//
+//        		}
+//        		
+//        	}
+//        	
+//        	String[] seqSources = new String[openImpCount];
+//        	
+//        	int[] IDs = new int[openImpCount];
         	int seqCount=0;
         	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
         		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
@@ -281,29 +282,30 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         				&& (openImp.getProperty("stack_source_type")==null ||
         				     (openImp.getProperty("stack_source_type")!=null &&
         				     !openImp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")))){
-        			seqSources[seqCount] = openImp.getTitle();
-        			IDs[seqCount++]=openImp.getID();
+        			imgStacks.add(openImp.getTitle());
+        			imgStackIDs.add(openImp.getID());
+        			seqCount++;
         		}
         		
         	}
         	if (seqCount>0){
-        		String[] seqSourcesCut = new String[seqCount];
-            	int[] IDsCut = new int[seqCount];
-            	for (int cnt=0; cnt<seqCount; cnt++){
-            		seqSourcesCut[cnt]=seqSources[cnt];
-            		IDsCut[cnt]=IDs[cnt];
-            	}
-            	if (openImpCount==1){
-            		this.imp = WindowManager.getImage(IDsCut[0]);
+//        		String[] seqSourcesCut = new String[seqCount];
+//            	int[] IDsCut = new int[seqCount];
+//            	for (int cnt=0; cnt<seqCount; cnt++){
+//            		seqSourcesCut[cnt]=seqSources[cnt];
+//            		IDsCut[cnt]=IDs[cnt];
+//            	}
+            	if (seqCount==1){
+            		this.imp = WindowManager.getImage(imgStackIDs.get(0));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
             	}
         		GenericDialog gd = new GenericDialog("Bending Crystal Track");
         		gd.addMessage("Select image sequence stack or press Cancel to open another stack");
-        		gd.addChoice("List of open virtual stacks", seqSourcesCut, seqSourcesCut[0]);
+        		gd.addChoice("List of open virtual stacks", imgStacks.toArray(new String[0]), imgStacks.get(0));
         		gd.showDialog();
     			if (!gd.wasCanceled()) {
-    				this.imp = WindowManager.getImage(IDsCut[gd.getNextChoiceIndex()]);
+    				this.imp = WindowManager.getImage(imgStackIDs.get(gd.getNextChoiceIndex()));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				
     				return returnMask;
