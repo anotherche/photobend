@@ -215,7 +215,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	
         	if (videoCount>0){
 
-            	if (videoCount==1){
+            	if (videoCount==1 && WindowManager.getCurrentImage().getID()==videoStackIDs.get(0)){
             		this.imp = WindowManager.getImage(videoStackIDs.get(0));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
@@ -235,42 +235,17 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 
 
         		if (od.getFileName() != null) {
-        			//File file = fc.getSelectedFile();
-        			//        		String filePath = fc.getSelectedFile().getPath();
-        			//        		String fileName = fc.getSelectedFile().getName();
-        			String fileName = od.getFileName();
-        			String filePath = od.getPath();
-        			
-
-        			IJ.run("Using FFmpeg...", "open=["+filePath+"] openquiet=true");
+        			IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] openquiet=true");
         			this.imp = WindowManager.getCurrentImage();
-
         		} else {
         			stopPlugin=true;
         			return returnMask;
         		}
         	
-        	
         } else {
-        	//this.imp = imp;
         	ArrayList<String> imgStacks = new ArrayList<String>(0);
     		ArrayList<Integer> imgStackIDs = new ArrayList<Integer>(0);
 
-//        	int stackCount=0;
-//        	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
-//        		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
-//        		if (openImp.getStack()!=null && openImp.getStack().getSize()>1){
-//        			videoStacks.add(openImp.getTitle());
-//        			videoStackIDs.add(openImp.getID());
-//        			videoCount++;
-//
-//        		}
-//        		
-//        	}
-//        	
-//        	String[] seqSources = new String[openImpCount];
-//        	
-//        	int[] IDs = new int[openImpCount];
         	int seqCount=0;
         	for (int srcCnt = 0; srcCnt < openImpCount; srcCnt++) {
         		ImagePlus openImp = WindowManager.getImage(srcCnt+1);
@@ -289,13 +264,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         		
         	}
         	if (seqCount>0){
-//        		String[] seqSourcesCut = new String[seqCount];
-//            	int[] IDsCut = new int[seqCount];
-//            	for (int cnt=0; cnt<seqCount; cnt++){
-//            		seqSourcesCut[cnt]=seqSources[cnt];
-//            		IDsCut[cnt]=IDs[cnt];
-//            	}
-            	if (seqCount==1){
+        		
+            	if (seqCount==1 && WindowManager.getCurrentImage().getID()==imgStackIDs.get(0)){
             		this.imp = WindowManager.getImage(imgStackIDs.get(0));
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
@@ -335,9 +305,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
             			return returnMask;
             		}
         			File[] fileList = (new File(od.getDirectory())).listFiles();
-        			//String[] tmplist = new String[fileList.length];
-	            	
-	            	
+           	
 	            	int listIter=0, firstFile=-1;
 	            	for (i = 0; i < fileList.length; i++){
 	            		if (fileList[i].isFile() && fileList[i].getName().contains(extension)){
