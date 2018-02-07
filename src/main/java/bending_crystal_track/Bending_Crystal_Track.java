@@ -2,8 +2,6 @@ package bending_crystal_track;
 
 import ij.*;
 import ij.process.*;
-import javafx.embed.swing.SwingFXUtils;
-import javafx.scene.image.Image;
 import ij.gui.*;
 import ij.io.*;
 
@@ -14,12 +12,11 @@ import java.time.Instant;
 
 //import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
-import org.bytedeco.javacv.FFmpegFrameGrabber;
-import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.OpenCVFrameConverter;
 //import org.bytedeco.javacv.OpenCVFrameConverter.ToIplImage;
 import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
+
 //import org.joda.time.DateTime;
 //import org.joda.time.Duration;
 
@@ -53,6 +50,8 @@ import javax.swing.JPanel;
 
 import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
+
+
 import org.bytedeco.javacpp.indexer.*;
 import org.bytedeco.javacpp.opencv_core.Mat;
 import org.bytedeco.javacpp.opencv_core.Point;
@@ -179,6 +178,10 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	
     public int setup(String arg, ImagePlus imp) {
     	
+    	
+    	
+    	
+    	
     	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	GenericDialog pluginMode = new GenericDialog("Bending Crystal Track");
     	pluginMode.addMessage("Choose from the image source type - video (experimental) or time lapse series");
@@ -231,16 +234,24 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     			}
         	} 
 
-        		OpenDialog	od = new OpenDialog("Open Video File", "");
-
-
-        		if (od.getFileName() != null) {
-        			IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] openquiet=true");
-        			this.imp = WindowManager.getCurrentImage();
-        		} else {
-        			stopPlugin=true;
-        			return returnMask;
-        		}
+//        		OpenDialog	od = new OpenDialog("Open Video File", "");
+//
+//
+//        		if (od.getFileName() != null) {
+//        			//IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] importquiet=true");
+//        			IJ.run("Using FFmpeg...", "open=["+od.getPath()+"]");
+//        			this.imp = WindowManager.getCurrentImage();
+//        		} else {
+//        			stopPlugin=true;
+//        			return returnMask;
+//        		}
+        	IJ.run("Using FFmpeg...");
+        	this.imp = WindowManager.getCurrentImage();
+        	if (this.imp.getProperty("stack_source_type")==null ||
+        			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
+    			stopPlugin=true;
+    			return returnMask;
+    		}
         	
         } else {
         	ArrayList<String> imgStacks = new ArrayList<String>(0);
@@ -305,19 +316,22 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
             			return returnMask;
             		}
         			File[] fileList = (new File(od.getDirectory())).listFiles();
-           	
-	            	int listIter=0, firstFile=-1;
+        			ArrayList<String> stackFiles = new ArrayList<String>(0);
+	            	int firstFile=0;
+
 	            	for (i = 0; i < fileList.length; i++){
 	            		if (fileList[i].isFile() && fileList[i].getName().contains(extension)){
-	            			listIter++;
-	            			if (fileList[i].getName().equals(firstFileName)) {
-	            				firstFile=listIter;
-	            				break;
-	            			}
-	            			
+	            			stackFiles.add(fileList[i].getName());
 	            		}
 	            	}
-	            	if (firstFile==-1) {
+	            	if (stackFiles.size()<2){
+	            		stopPlugin=true;
+	        			return returnMask;
+	            	} else {
+	            		stackFiles.sort(null);//(String::compareToIgnoreCase);
+	            		firstFile=stackFiles.indexOf(firstFileName) + 1;
+	            	}
+	            	if (firstFile==0) {
 	        			stopPlugin=true;
 	        			return returnMask;
 	        		}
