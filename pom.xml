@@ -8,7 +8,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>19.0.0</version>
+		<version>29.0.0-beta-3</version>
 	<relativePath />
 	</parent>
 
@@ -86,9 +86,7 @@
 		<main-class>Bending_Crystal_Track</main-class>
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
-		<imagej-maven-plugin.version>0.7.0</imagej-maven-plugin.version>
-		<imagej.app.subdirectory>plugins/PhotoBend</imagej.app.subdirectory>
-		<imagej.ignoreDependencies>true</imagej.ignoreDependencies>
+		<scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
 		
 	</properties>
 
@@ -185,6 +183,102 @@
    					<groupId>org.bytedeco.javacpp-presets</groupId>
    					<artifactId>ffmpeg-platform</artifactId>
    				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>flycapture-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>artoolkitplus-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>flandmark-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>librealsense-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>ffmpeg-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>leptonica-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libdc1394-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>videoinput-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>tesseract-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>librealsense2-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libfreenect-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libfreenect2-platform</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>artoolkitplus</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libfreenect2</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>tesseract</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>leptonica</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>videoinput</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>librealsense2</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>flandmark</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>librealsense</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libfreenect</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>flycapture</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>libdc1394</artifactId>
+   				</exclusion>
+   				<exclusion>
+   					<groupId>org.bytedeco</groupId>
+   					<artifactId>ffmpeg</artifactId>
+   				</exclusion>
    			</exclusions>
 		</dependency>
 		<dependency>
@@ -202,18 +296,18 @@
 		<plugins>
 		
 			<plugin>
-	        <groupId>net.imagej</groupId>
-	        <artifactId>imagej-maven-plugin</artifactId>
-	        <version>0.7.0</version>
+	        <groupId>org.scijava</groupId>
+	        <artifactId>scijava-maven-plugin</artifactId>
+<!-- 	        <version>0.7.0</version> -->
 	        <executions>
 	          <execution>
-	            <id>copy-jars</id>
+	            <id>populate-app</id>
 	            <phase>install</phase>
 	            <goals>
-	              <goal>copy-jars</goal>
+	              <goal>populate-app</goal>
 	            </goals>
 	            <configuration>
-	              <imagej.app.subdirectory>plugins/PhotoBend</imagej.app.subdirectory>
+	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
 	              
 	              <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
 <!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
@@ -283,7 +377,7 @@
 			<dependency>
 				<groupId>org.bytedeco</groupId>
 				<artifactId>javacv-platform</artifactId>
-				<version>1.4</version>
+				<version>1.5.3</version>
 			</dependency>
 			<dependency>
 				<groupId>com.drewnoakes</groupId>

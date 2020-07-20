@@ -7,54 +7,53 @@ import ij.io.*;
 
 import java.io.*;
 import java.time.Duration;
-//import java.util.*;
 import java.time.Instant;
 
-//import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacv.Java2DFrameConverter;
+import org.bytedeco.javacv.Java2DFrameUtils;
 import org.bytedeco.javacv.OpenCVFrameConverter;
-//import org.bytedeco.javacv.OpenCVFrameConverter.ToIplImage;
 import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
-
-//import org.joda.time.DateTime;
-//import org.joda.time.Duration;
 
 
 import com.drew.imaging.ImageMetadataReader;
-//import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
-
-//import ffmpeg_video_import.FFmpeg_FrameReader;
-
-
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 import ij.plugin.FolderOpener;
-//import ij.plugin.*;
 import ij.plugin.filter.*;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
-//import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Hashtable;
+//import java.util.Random;
 import java.util.Set;
+
+import javax.imageio.ImageIO;
+//import javax.swing.Icon;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-//import javax.swing.JTextField;
 
-import static org.bytedeco.javacpp.opencv_core.*;
-import static org.bytedeco.javacpp.opencv_imgproc.*;
+//import static org.bytedeco.javacpp.opencv_core.*;
+//import static org.bytedeco.javacpp.opencv_imgproc.*;
+import org.bytedeco.opencv.opencv_core.*;
+import org.bytedeco.opencv.opencv_core.Point;
+//import org.bytedeco.opencv.opencv_imgproc.*;
+
+import static org.bytedeco.opencv.global.opencv_core.*;
+import static org.bytedeco.opencv.global.opencv_imgproc.*;
 
 
 import org.bytedeco.javacpp.indexer.*;
-import org.bytedeco.javacpp.opencv_core.Mat;
-import org.bytedeco.javacpp.opencv_core.Point;
+//import org.bytedeco.javacpp.opencv_core.Mat;
+//import org.bytedeco.javacpp.opencv_core.Point;
 
 
 /* This is an ImageJ plugin providing tracking of 
@@ -79,12 +78,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	private static final Set<String> videoTypes = new HashSet<String>(java.util.Arrays.asList(
 		     new String[] {"WEBM", "MKV", "VOB", "OGV", "OGG", "DRC", "MNG", "AVI", 
 		    		 "MOV", "QT", "WMV", "YUV", "RM", "RMVB", "ASF", "AMV", "MP4", 
-		    		 "M4P", "MPG", "MP2", "MPEG", "MPE", "MPV", "MPG", "MPEG", "M2V", 
+		    		 "M4P", "MPG", "MP2", "MPEG", "MPE", "MPV", "M2V", 
 		    		 "M4V", "SVI", "3GP", "3G2", "MXF", "ROQ", "NSV", "FLV", "F4V", 
 		    		 "F4P", "F4A", "F4B" }
 		));
 	
     ImagePlus imp, ref_Image, refImageBinary, free_ref, free_tpl, holder_ref, mid_ref, mid_tpl;
+    ArrayList<ImagePlus> refBinaryFrames;
 
     GaussianBlur gaussianBlur;
     ImageStack stack;
@@ -104,7 +104,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     	   deflection_angle_ini, deflection_angle, 
     	   full_angle, full_angle_ini,
     	   initial_angle,
-    	   deformation;
+    	   deformation=0.0;
     double H0_x,H0_y;
     ArrayList<Double> curv_list, deform_list, time_list, freeEnd_matchRes, attEnd_matchRes, mid_matchRes ; 
     double curv_min=0.0, curv_max=0.0, def_min=0.0, def_max = 0.0;
@@ -113,7 +113,10 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     ImagePlus plotImage, plotDefImage;
     boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, saveFlatten=false, videoInput=false, stopPlugin=false,
     		useTimeStamps=true;
-    volatile WaitForUserDialog StopDlg=null, MonitorDlg=null;
+    volatile JDialog StopDlg=null;
+    //volatile WaitForUserDialog MonitorDlg=null;
+    volatile int stopReason = -1;
+    Thread StopThread;
     
     // For movie sequence
     int movieFrameNum=0, previousFrameNum=0;
@@ -134,6 +137,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	double[] matchThreshold=new double[]{0.1, 0.1, 0.05, 0.05, 0.2, 0.2};
 	ImageWindow imgWindow;
 	Font fontParamInfo;
+	
+	//boolean doRandomAnalysis=true;
 	
 
 
@@ -245,7 +250,18 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 //        			stopPlugin=true;
 //        			return returnMask;
 //        		}
-        	IJ.run("Using FFmpeg...");
+        	
+        	String videoReadCommand = "Using FFmpeg...";
+        	Hashtable table = Menus.getCommands();
+    		String className = (String)table.get(videoReadCommand);
+    		if (className!=null) IJ.run(videoReadCommand);
+    		else {
+    			videoReadCommand = "Compressed video";
+    			className = (String)table.get(videoReadCommand);
+    			if (className==null)
+    				IJ.showMessage("FFmpeg_FrameReader plugin is necessary to import compressed video. \nIt can be intalled from the update site http://sites.imagej.net/Anotherche.");
+    			IJ.run(videoReadCommand);
+    		}
         	this.imp = WindowManager.getCurrentImage();
         	if (this.imp.getProperty("stack_source_type")==null ||
         			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
@@ -335,6 +351,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	        			stopPlugin=true;
 	        			return returnMask;
 	        		}
+	            	
         			IJ.run("Image Sequence...", "open=["+sequencePath+"] starting="+firstFile+" file="+extension+" sort use");
         			this.imp = IJ.getImage();
         			FileInfo fi = new FileInfo();
@@ -353,6 +370,409 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         }
         
         return returnMask;
+    }
+    
+    private boolean selectPoints(boolean reselect) {
+    	
+    	disX_free=0.0;
+		disY_free=0.0;
+		disX_holder=0.0;
+		disY_holder=0.0;
+		disX_mid=0.0;
+		disY_mid=0.0;
+    	
+    	Overlay ov;
+    	ov = new Overlay();
+        imp.setOverlay(ov);
+        
+        refSlice = imp.getCurrentSlice();
+        ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
+        
+        refImageBinary = ref_Image.duplicate();
+        IJ.run(refImageBinary, "Make Binary", "");
+        IJ.run(refImageBinary, "Open", "");
+        IJ.run(refImageBinary, "Erode", "");
+        IJ.run(refImageBinary, "Erode", "");
+        IJ.run(refImageBinary, "Find Edges", "");
+        IJ.run(refImageBinary, "Invert", "");
+        
+        refBinaryFrames.add(refImageBinary);
+        
+        imp.killRoi();
+        
+        do {
+        	IJ.setTool("point");
+        	new WaitForUserDialog("Bending_Crystal_Track", "Select a point on the FREE needle's end...\nthen press OK.").show();
+        
+        	proi_free = (PointRoi)imp.getRoi();
+        } while(proi_free==null && 
+        		IJ.showMessageWithCancel("Error", "Point is not selected.\nPlease follow the instruction or press cancel to stop."));
+        
+        if (proi_free==null) return false;
+        refX_free=proi_free.getFloatPolygon().xpoints[0];
+        refY_free=proi_free.getFloatPolygon().ypoints[0];
+        
+        
+        
+        double d1 = refX_free, d2 = width - refX_free, d3 = refY_free, d4 = height - refY_free;
+        double dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
+        if (dmin<=sArea+1)
+        {
+        	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
+            return false;
+        }
+        
+        int rect_half_size=templSize/2;
+        double rect_hs_tmp = Math.max(rect_half_size, 0.7*rect_half_size+sArea);
+        if (rect_hs_tmp>dmin)
+        {
+        	rect_half_size =(int) Math.min((dmin-sArea)/0.7, dmin);
+        }
+        
+       
+        proi_free.setPointType(3);
+        ov.addElement(proi_free);
+        imp.setOverlay(ov);
+        
+        
+        imp.killRoi();
+        
+        
+        do {
+        	IJ.setTool("point");
+        	new WaitForUserDialog("Bending_Crystal_Track", "Select a point on the ATTACHED needle's end...\nthen press OK.").show();
+        
+        	proi_att = (PointRoi)imp.getRoi();
+        } while(proi_att==null && 
+        		IJ.showMessageWithCancel("Error", "Point is not selected.\nPlease follow the instruction or press cancel to stop."));
+        
+        if (proi_att==null) return false;
+        refX_att=proi_att.getFloatPolygon().xpoints[0];
+        refY_att=proi_att.getFloatPolygon().ypoints[0];
+        
+        H0_x=refX_free-refX_att;
+        H0_y=refY_free-refY_att;
+        hord_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
+        
+        full_angle_ini=Math.acos(H0_x/hord_ini);
+        if (refY_free>refY_att) full_angle_ini=-full_angle_ini;
+        
+        proi_att.setPointType(3);
+        ov.addElement(proi_att); 
+        Line crystal_line = new Line(refX_free,refY_free,refX_att,refY_att);
+        ov.addElement(crystal_line);
+        imp.setOverlay(ov);
+        
+        
+        refX_mid = (refX_free + refX_att)/2;
+        refY_mid = (refY_free + refY_att)/2;
+        
+        int dialogButton = JOptionPane.YES_NO_OPTION;
+        int dialogResult = JOptionPane.showConfirmDialog(null, "Is the cristal initially straight?", 
+        													"Initial crystal bending", dialogButton);
+        if(dialogResult == 0) {
+          length_ini=hord_ini;
+          if (setStandardCrystalLength()) {
+        	  proi_att.setLocation(refX_att, refY_att);
+        	  ov.addElement(proi_att); 
+        	  crystal_line = new Line(refX_free,refY_free,refX_att,refY_att);
+              ov.addElement(crystal_line);
+              imp.setOverlay(ov);
+          }
+          
+          
+        } else {
+        	double x0 = refX_mid,
+     			   y0 = refY_mid,
+     			  
+     			   dx = -(refY_free-refY_att),
+     			   dy = refX_free-refX_att,
+     			   dr = Math.sqrt(dx*dx+dy*dy),
+     			   dh = height/2;
+             
+     				dx/=dr;
+     				dy/=dr;
+     				
+     				
+             
+             
+             
+             
+             Line mid_line = new Line(x0-dx*dh, y0-dy*dh, x0+dx*dh, y0+dy*dh);
+             ov.addElement(mid_line);
+             imp.setOverlay(ov);
+             
+             
+             imp.killRoi();
+             do {
+             	IJ.setTool("point");
+             	new WaitForUserDialog("Bending_Crystal_Track", "Select a point in the MIDDLE of the needle...\nthen press OK.").show();
+             
+             	 proi_mid = (PointRoi)imp.getRoi();
+             } while (proi_mid==null && 
+             		IJ.showMessageWithCancel("Error", "Point is not selected.\nPlease follow the instruction or press cancel to stop."));
+            
+             if (proi_mid==null) return false;
+             refX_mid=proi_mid.getFloatPolygon().xpoints[0];
+             refY_mid=proi_mid.getFloatPolygon().ypoints[0];
+             
+             
+            
+             proi_mid.setPointType(3);
+             ov.addElement(proi_mid);
+             imp.setOverlay(ov);
+        } 
+        
+        
+        
+        
+        
+        
+        calcBendingParams(reselect);
+        
+        deflection_angle_ini=deflection_angle;
+        bending_angle_ini=bending_angle;
+        curvature_ini=curvature;
+        initial_angle=full_angle_ini+0.5*bending_angle_ini;
+        
+        
+        
+        
+        imp.killRoi();
+        do {
+         	IJ.setTool("rect");
+         	new WaitForUserDialog("Bending_Crystal_Track", 
+         			"Select a rectangle region around the stationary HOLDER edge.\n"//
+            		+"A rectangle around a corner would be the best.\n"//
+            		+"Press OK after the selection.").show();
+         
+         	holder_roi=imp.getRoi();
+         } while ((holder_roi==null || !holder_roi.isArea()) && 
+         		IJ.showMessageWithCancel("Error", "Region is not selected.\nPlease follow the instruction or press cancel to stop."));
+        
+         if (holder_roi==null || !holder_roi.isArea()) return false;
+            holder_rect = holder_roi.getBounds();
+            imp.killRoi();
+            holder_roi = new Roi(holder_rect);
+
+        
+        ov.addElement(holder_roi);
+        imp.setOverlay(ov);
+        
+        ref_Image.killRoi();
+        ref_Image.setRoi(holder_roi);
+        holder_ref=ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter holder_ic = new ImageConverter(holder_ref);
+        	holder_ic.convertToGray32();
+        }
+        gaussianBlur = new GaussianBlur();
+        
+        ImageProcessor ip_tmp=holder_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        
+        
+        ImagePlus tmp_Ip;
+        if (refBitDepth==24 && !matchIntensity) {
+				tmp_Ip = holder_ref.duplicate();
+				ImageConverter ic = new ImageConverter(tmp_Ip);
+        	ic.convertToGray32();
+			} else tmp_Ip=holder_ref;
+		ImageRoi imageRoi_att = new ImageRoi(holder_rect.x, holder_rect.y,tmp_Ip.getProcessor());
+        imageRoi_att.setOpacity(0.3);
+        ov.addElement(imageRoi_att);
+        imp.setOverlay(ov);
+       
+       
+         
+        free_roi=new Roi(refX_free-rect_half_size,refY_free-rect_half_size,2*rect_half_size,2*rect_half_size);
+        free_rect = free_roi.getBounds();
+        
+        
+        
+        free_roi=new Roi(free_rect);
+        
+        freeRefCenterShiftX = refX_free - free_rect.x - (free_rect.width - 1)/2.0;
+        freeRefCenterShiftY = refY_free - free_rect.y - (free_rect.height - 1)/2.0;
+        
+        
+        ref_Image.killRoi();
+        ref_Image.setRoi(free_roi);
+        free_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic = new ImageConverter(free_ref);
+        	ic.convertToGray32();
+        }
+        
+        ip_tmp=free_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+
+        free_rect.x+=(int)(free_rect.width*0.15);
+        free_rect.y+=(int)(free_rect.height*0.15);
+        free_rect.width=(int)(free_rect.width*0.7);
+        free_rect.height=(int)(free_rect.height*0.7);
+        refCropRoi =  new Roi((int)(free_ref.getWidth()*0.15), (int)(free_ref.getHeight()*0.15), 
+				(int)(free_ref.getWidth()*0.7), (int)(free_ref.getHeight()*0.7));
+       
+        tmp_Ip = free_ref.duplicate();
+		tmp_Ip.setRoi(refCropRoi);
+		tmp_Ip = tmp_Ip.crop();
+        if (refBitDepth==24 && !matchIntensity) {
+				
+				ImageConverter ic = new ImageConverter(tmp_Ip);
+        	ic.convertToGray32();
+			} 
+		imageRoi_att = new ImageRoi(free_rect.x, free_rect.y,tmp_Ip.getProcessor());
+        imageRoi_att.setOpacity(0.3);
+        ov.addElement(imageRoi_att);
+        imp.setOverlay(ov);
+        
+        
+        d1 = refX_mid;
+        d2 = width - refX_mid;
+        d3 = refY_mid;
+        d4 = height - refY_mid;
+        dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
+        if (dmin<=sArea+1)
+        {
+        	IJ.showMessage("Error", "Search point is to close to the edge");
+            return false;
+        }
+        
+        rect_half_size=templSize/2;
+        rect_hs_tmp = Math.max(rect_half_size, 0.7*rect_half_size+sArea);
+        if (rect_hs_tmp>dmin)
+        {
+        	rect_half_size =(int) Math.min((dmin-sArea)/0.7, dmin);
+        }
+        
+        middle_roi=new Roi(refX_mid-rect_half_size,refY_mid-rect_half_size,2*rect_half_size,2*rect_half_size);
+        mid_rect = middle_roi.getBounds();
+        middle_roi=new Roi(mid_rect);
+        
+        midRefCenterShiftX = refX_mid -  mid_rect.x - ( mid_rect.width - 1)/2.0 ;
+        midRefCenterShiftY = refY_mid -  mid_rect.y - ( mid_rect.height - 1)/2.0;
+        
+        
+        
+        ref_Image.killRoi();
+        ref_Image.setRoi(middle_roi);
+        
+
+        mid_rect.x+=(int)(mid_rect.width*0.15);
+        mid_rect.y+=(int)(mid_rect.height*0.15);
+        mid_rect.width=(int)(mid_rect.width*0.7);
+        mid_rect.height=(int)(mid_rect.height*0.7);
+        
+        mid_ref = ref_Image.crop();
+        if (matchIntensity) {
+        	ImageConverter ic_mid = new ImageConverter(mid_ref);
+        	ic_mid.convertToGray32();
+        }
+        
+        ip_tmp=mid_ref.getProcessor();
+        gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
+        mid_refCropRoi =  new Roi((int)(mid_ref.getWidth()*0.15), 
+        						  (int)(mid_ref.getHeight()*0.15), 
+        						  (int)(mid_ref.getWidth()*0.7), 
+        						  (int)(mid_ref.getHeight()*0.7));
+
+        
+        
+        tmp_Ip = mid_ref.duplicate();
+		tmp_Ip.setRoi(mid_refCropRoi);
+		tmp_Ip = tmp_Ip.crop();
+        if (refBitDepth==24 && !matchIntensity) {
+				
+				ImageConverter ic = new ImageConverter(tmp_Ip);
+        	ic.convertToGray32();
+			} 
+		imageRoi_att = new ImageRoi(mid_rect.x, mid_rect.y,tmp_Ip.getProcessor());
+        imageRoi_att.setOpacity(0.3);
+        ov.addElement(imageRoi_att);
+        imp.setOverlay(ov);
+        
+        for(ImagePlus refBin : refBinaryFrames) {
+        	ImageRoi ref_ImageRoi = new ImageRoi(0, 0,refBin.getProcessor());
+	        ref_ImageRoi.setOpacity(0.2);
+	        ref_ImageRoi.setZeroTransparent(true);
+	        ov.addElement(ref_ImageRoi);
+        }
+        
+        
+        imp.setOverlay(ov);
+        
+        
+        if (JOptionPane.showConfirmDialog(null, "Everything is ready.\nPress OK to start.", 
+				"Bending_Crystal_Track", JOptionPane.OK_CANCEL_OPTION)==JOptionPane.CANCEL_OPTION) 
+        	{
+        		
+        		imp.killRoi();
+        		ov.clear();
+        		imp.setOverlay(ov);
+        		return false;
+        	}
+		return true;
+    }
+    
+    private void startControlThread() {
+    	StopThread = new Thread(new Runnable()
+		{
+        	@Override
+			public void run() 
+			{
+//        		WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", "Close this message to stop the track");
+//        		dlg.setName("StopThread");
+//        		StopDlg=dlg;
+//        		dlg.show();
+        		stopReason = -1;
+    			Object[] options = { "Stop tracking", "Reselect points"}; 
+        		JOptionPane optPane = new JOptionPane("Stop the track or reselect measurement points", JOptionPane.INFORMATION_MESSAGE,  JOptionPane.DEFAULT_OPTION,
+                        null, options);
+
+        		
+        		JDialog dlg = optPane.createDialog("Tracking in progress...");
+                
+        		
+        		
+        		//JDialog dlg = new JDialog(null, "Tracking in progress...", Dialog.ModalityType.DOCUMENT_MODAL);
+        		//dlg.setContentPane(optPane);
+        		dlg.setModalityType(Dialog.ModalityType.DOCUMENT_MODAL);
+        		dlg.setName("StopThread");
+        		dlg.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+        		
+        		StopDlg=dlg;
+        		dlg.pack();
+        		dlg.setLocation(10, 10);
+        		dlg.setVisible(true);
+        		
+        		
+        		Object selectedValue = optPane.getValue();
+        		dlg.dispose();
+        		StopDlg = null;
+
+                if(selectedValue == null){
+                	stopReason = 0;
+                	return;
+                }
+                
+                int maxCounter = options.length;
+                for(int counter = 0; counter < maxCounter; counter++) {
+                    if(options[counter].equals(selectedValue)) stopReason = counter;
+                        return;
+                }
+                stopReason = 0;
+                return;
+        		
+        		
+        		
+        		
+        		
+        		
+				
+			}
+		});
+		StopThread.start();	
     }
 
     
@@ -437,13 +857,9 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         width = imp.getWidth();
         height = imp.getHeight();
         refBitDepth = imp.getBitDepth();
-		disX_free=0.0;
-		disY_free=0.0;
-		disX_holder=0.0;
-		disY_holder=0.0;
-		disX_mid=0.0;
-		disY_mid=0.0;
-		Overlay ov;
+        refBinaryFrames = new ArrayList<ImagePlus>(0);
+		
+		
 //		Overlay ini_ov = imp.getOverlay();
 //		if (ini_ov!=null) {
 //			ini_ov.clear();
@@ -454,328 +870,9 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
             if (!getUserParameters()) { return;
             }
             
-            ov = new Overlay();
-            imp.setOverlay(ov);
-            
-            refSlice = imp.getCurrentSlice();
-            ref_Image = new ImagePlus(stack.getSliceLabel(refSlice), stack.getProcessor(refSlice));
-            
-            refImageBinary = ref_Image.duplicate();
-            IJ.run(refImageBinary, "Make Binary", "");
-            IJ.run(refImageBinary, "Open", "");
-            IJ.run(refImageBinary, "Erode", "");
-            IJ.run(refImageBinary, "Erode", "");
-            IJ.run(refImageBinary, "Find Edges", "");
-            IJ.run(refImageBinary, "Invert", "");
-            
-            imp.killRoi();
-            
-            IJ.setTool("point");
-            new WaitForUserDialog("Bending_Crystal_Track", "Select a point on the FREE needle's end...\nthen press OK.").show();
-            
-            proi_free = (PointRoi)imp.getRoi();
-            if (proi_free!=null) {
-            refX_free=proi_free.getFloatPolygon().xpoints[0];
-            refY_free=proi_free.getFloatPolygon().ypoints[0];
-            
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            double d1 = refX_free, d2 = width - refX_free, d3 = refY_free, d4 = height - refY_free;
-            double dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
-            if (dmin<=sArea+1)
-            {
-            	IJ.showMessage("Error", "Search point is to close to the edge.\nReduce template rectangle size on the first dialog.");
-                return;
-            }
-            
-            int rect_half_size=templSize/2;
-            double rect_hs_tmp = Math.max(rect_half_size, 0.7*rect_half_size+sArea);
-            if (rect_hs_tmp>dmin)
-            {
-            	rect_half_size =(int) Math.min((dmin-sArea)/0.7, dmin);
-            }
-            
-           
-            proi_free.setPointType(3);
-            ov.addElement(proi_free);
-            imp.setOverlay(ov);
+            if (!selectPoints(false)) return;
             
             
-            imp.killRoi();
-            IJ.setTool("point");
-            new WaitForUserDialog("Bending_Crystal_Track", "Select a point on the ATTACHED needle's end...\nthen press OK.").show();
-            
-            proi_att = (PointRoi)imp.getRoi();
-            if (proi_att!=null) {
-            refX_att=proi_att.getFloatPolygon().xpoints[0];
-            refY_att=proi_att.getFloatPolygon().ypoints[0];
-            } else {
-            	IJ.showMessage("Error", "point ROI needed");
-                return;
-            }
-            
-            H0_x=refX_free-refX_att;
-            H0_y=refY_free-refY_att;
-            hord_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
-            
-            full_angle_ini=Math.acos(H0_x/hord_ini);
-            if (refY_free>refY_att) full_angle_ini=-full_angle_ini;
-            
-            proi_att.setPointType(3);
-            ov.addElement(proi_att); 
-            Line crystal_line = new Line(refX_free,refY_free,refX_att,refY_att);
-            ov.addElement(crystal_line);
-            imp.setOverlay(ov);
-            
-            
-            refX_mid = (refX_free + refX_att)/2;
-            refY_mid = (refY_free + refY_att)/2;
-            
-            int dialogButton = JOptionPane.YES_NO_OPTION;
-            int dialogResult = JOptionPane.showConfirmDialog(null, "Is the cristal initially straight?", 
-            													"Initial crystal bending", dialogButton);
-            if(dialogResult == 0) {
-              length_ini=hord_ini;
-              if (setStandardCrystalLength()) {
-            	  proi_att.setLocation(refX_att, refY_att);
-            	  ov.addElement(proi_att); 
-            	  crystal_line = new Line(refX_free,refY_free,refX_att,refY_att);
-                  ov.addElement(crystal_line);
-                  imp.setOverlay(ov);
-              }
-              
-              
-            } else {
-            	double x0 = refX_mid,
-         			   y0 = refY_mid,
-         			  
-         			   dx = -(refY_free-refY_att),
-         			   dy = refX_free-refX_att,
-         			   dr = Math.sqrt(dx*dx+dy*dy),
-         			   dh = height/2;
-                 
-         				dx/=dr;
-         				dy/=dr;
-         				
-         				
-                 
-                 
-                 
-                 
-                 Line mid_line = new Line(x0-dx*dh, y0-dy*dh, x0+dx*dh, y0+dy*dh);
-                 ov.addElement(mid_line);
-                 imp.setOverlay(ov);
-                 
-                 
-                 imp.killRoi();
-                 IJ.setTool("point");
-                 new WaitForUserDialog("Bending_Crystal_Track", 
-                		 "Select a point in the MIDDLE of the needle...\nthen press OK.").show();
-                 
-                 
-                 proi_mid = (PointRoi)imp.getRoi();
-                 if (proi_mid!=null) {
-                 refX_mid=proi_mid.getFloatPolygon().xpoints[0];
-                 refY_mid=proi_mid.getFloatPolygon().ypoints[0];
-                 } else {
-                 	IJ.showMessage("Error", "point ROI needed");
-                     return;
-                 }
-                 
-                
-                 proi_mid.setPointType(3);
-                 ov.addElement(proi_mid);
-                 imp.setOverlay(ov);
-            } 
-            
-            
-            
-            
-            
-            
-            calcBendingParams();
-            
-            deflection_angle_ini=deflection_angle;
-            bending_angle_ini=bending_angle;
-            curvature_ini=curvature;
-            initial_angle=full_angle_ini+0.5*bending_angle_ini;
-            
-            
-            
-            
-            imp.killRoi();
-            IJ.setTool("rect");
-            new WaitForUserDialog("Bending_Crystal_Track", 
-            		"Select a rectangle region around the stationary HOLDER edge.\n"//
-            		+"A rectangle around a corner would be the best.\n"//
-            		+"Press OK after the selection.").show();
-            holder_roi=imp.getRoi();
-            if (holder_roi != null && holder_roi.isArea()) {
-                holder_rect = holder_roi.getBounds();
-                imp.killRoi();
-                holder_roi = new Roi(holder_rect);
-                
-				
-                
-            } else {
-                IJ.showMessage("Error", "rectangular ROI needed");
-                return;
-            }
-            
-            ov.addElement(holder_roi);
-            imp.setOverlay(ov);
-            
-            ref_Image.killRoi();
-            ref_Image.setRoi(holder_roi);
-            holder_ref=ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter holder_ic = new ImageConverter(holder_ref);
-            	holder_ic.convertToGray32();
-            }
-            gaussianBlur = new GaussianBlur();
-            
-            ImageProcessor ip_tmp=holder_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            
-            
-            ImagePlus tmp_Ip;
-            if (refBitDepth==24 && !matchIntensity) {
- 				tmp_Ip = holder_ref.duplicate();
- 				ImageConverter ic = new ImageConverter(tmp_Ip);
-            	ic.convertToGray32();
- 			} else tmp_Ip=holder_ref;
-			ImageRoi imageRoi_att = new ImageRoi(holder_rect.x, holder_rect.y,tmp_Ip.getProcessor());
-	        imageRoi_att.setOpacity(0.3);
-	        ov.addElement(imageRoi_att);
-	        imp.setOverlay(ov);
-           
-           
-             
-            free_roi=new Roi(refX_free-rect_half_size,refY_free-rect_half_size,2*rect_half_size,2*rect_half_size);
-            free_rect = free_roi.getBounds();
-            
-            
-            
-            free_roi=new Roi(free_rect);
-            
-            freeRefCenterShiftX = refX_free - free_rect.x - (free_rect.width - 1)/2.0;
-            freeRefCenterShiftY = refY_free - free_rect.y - (free_rect.height - 1)/2.0;
-            
-            
-            ref_Image.killRoi();
-            ref_Image.setRoi(free_roi);
-            free_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic = new ImageConverter(free_ref);
-            	ic.convertToGray32();
-            }
-            
-            ip_tmp=free_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-
-            free_rect.x+=(int)(free_rect.width*0.15);
-            free_rect.y+=(int)(free_rect.height*0.15);
-            free_rect.width=(int)(free_rect.width*0.7);
-            free_rect.height=(int)(free_rect.height*0.7);
-            refCropRoi =  new Roi((int)(free_ref.getWidth()*0.15), (int)(free_ref.getHeight()*0.15), 
-					(int)(free_ref.getWidth()*0.7), (int)(free_ref.getHeight()*0.7));
-           
-            tmp_Ip = free_ref.duplicate();
-			tmp_Ip.setRoi(refCropRoi);
-			tmp_Ip = tmp_Ip.crop();
-            if (refBitDepth==24 && !matchIntensity) {
- 				
- 				ImageConverter ic = new ImageConverter(tmp_Ip);
-            	ic.convertToGray32();
- 			} 
-			imageRoi_att = new ImageRoi(free_rect.x, free_rect.y,tmp_Ip.getProcessor());
-	        imageRoi_att.setOpacity(0.3);
-	        ov.addElement(imageRoi_att);
-	        imp.setOverlay(ov);
-            
-            
-            d1 = refX_mid;
-            d2 = width - refX_mid;
-            d3 = refY_mid;
-            d4 = height - refY_mid;
-            dmin = Math.min(Math.min(d1, d2), Math.min(d3, d4));
-            if (dmin<=sArea+1)
-            {
-            	IJ.showMessage("Error", "Search point is to close to the edge");
-                return;
-            }
-            
-            rect_half_size=templSize/2;
-            rect_hs_tmp = Math.max(rect_half_size, 0.7*rect_half_size+sArea);
-            if (rect_hs_tmp>dmin)
-            {
-            	rect_half_size =(int) Math.min((dmin-sArea)/0.7, dmin);
-            }
-            
-            middle_roi=new Roi(refX_mid-rect_half_size,refY_mid-rect_half_size,2*rect_half_size,2*rect_half_size);
-            mid_rect = middle_roi.getBounds();
-            middle_roi=new Roi(mid_rect);
-            
-            midRefCenterShiftX = refX_mid -  mid_rect.x - ( mid_rect.width - 1)/2.0 ;
-            midRefCenterShiftY = refY_mid -  mid_rect.y - ( mid_rect.height - 1)/2.0;
-            
-            
-            
-            ref_Image.killRoi();
-            ref_Image.setRoi(middle_roi);
-            
-
-            mid_rect.x+=(int)(mid_rect.width*0.15);
-            mid_rect.y+=(int)(mid_rect.height*0.15);
-            mid_rect.width=(int)(mid_rect.width*0.7);
-            mid_rect.height=(int)(mid_rect.height*0.7);
-            
-            mid_ref = ref_Image.crop();
-            if (matchIntensity) {
-            	ImageConverter ic_mid = new ImageConverter(mid_ref);
-            	ic_mid.convertToGray32();
-            }
-            
-            ip_tmp=mid_ref.getProcessor();
-            gaussianBlur.blurGaussian(ip_tmp, 2, 2, 0.02);
-            mid_refCropRoi =  new Roi((int)(mid_ref.getWidth()*0.15), 
-            						  (int)(mid_ref.getHeight()*0.15), 
-            						  (int)(mid_ref.getWidth()*0.7), 
-            						  (int)(mid_ref.getHeight()*0.7));
-
-            
-            
-            tmp_Ip = mid_ref.duplicate();
-			tmp_Ip.setRoi(mid_refCropRoi);
-			tmp_Ip = tmp_Ip.crop();
-            if (refBitDepth==24 && !matchIntensity) {
- 				
- 				ImageConverter ic = new ImageConverter(tmp_Ip);
-            	ic.convertToGray32();
- 			} 
-			imageRoi_att = new ImageRoi(mid_rect.x, mid_rect.y,tmp_Ip.getProcessor());
-	        imageRoi_att.setOpacity(0.3);
-	        ov.addElement(imageRoi_att);
-	        imp.setOverlay(ov);
-            
-	        ImageRoi ref_ImageRoi = new ImageRoi(0, 0,refImageBinary.getProcessor());
-	        ref_ImageRoi.setOpacity(0.3);
-	        ov.addElement(imageRoi_att);
-	        imp.setOverlay(ov);
-            
-            
-            if (JOptionPane.showConfirmDialog(null, "Everything is ready.\nPress OK to start.", 
-					"Bending_Crystal_Track", JOptionPane.OK_CANCEL_OPTION)==JOptionPane.CANCEL_OPTION) 
-            	{
-            		
-            		imp.killRoi();
-            		ov.clear();
-            		imp.setOverlay(ov);
-            		return;
-            	}
 
         if (showRT) {
             
@@ -809,9 +906,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	name = stack.getSliceLabel(refSlice);
         }
         
-        
-        first_shot_time = getShotTime(directory + name, refSlice);
-    	if (first_shot_time==null) ExifTime=false;
+//        if (doRandomAnalysis){
+//        	setAltTimeMeasure();
+//        	ExifTime=false;
+//        } else {
+        	first_shot_time = getShotTime(directory + name, refSlice);
+        	if (first_shot_time==null) ExifTime=false;
+//        }
     	
     	if (saveFlatten) {
     		
@@ -867,32 +968,52 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         plotDefImage.show();
         
         
-        Thread StopThread = new Thread(new Runnable()
-		{
-        	@Override
-			public void run() 
-			{
-        		WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", "Close this message to stop the track");
-        		dlg.setName("StopThread");
-        		StopDlg=dlg;
-        		dlg.show();
-				
-			}
-		});
-		StopThread.start();	
+//        StopThread = new Thread(new Runnable()
+//		{
+//        	@Override
+//			public void run() 
+//			{
+////        		WaitForUserDialog dlg = new WaitForUserDialog("Tracking in progress...", "Close this message to stop the track");
+////        		dlg.setName("StopThread");
+////        		StopDlg=dlg;
+////        		dlg.show();
+//        		Object[] options = { "Stop tracking", "Reselect points",
+//        		        "Stop tracking", "Reselect points" }; 
+//        		JOptionPane optPane = new JOptionPane("Stop the track or reselect measurement points", JOptionPane.INFORMATION_MESSAGE,  JOptionPane.DEFAULT_OPTION,
+//                        null, Object[] options);
+//
+//        		JDialog dlg = new JDialog(null, "Tracking in progress...", true);
+//        		dlg.setContentPane(optPane);
+//        		dlg.setName("StopThread");
+//        		StopDlg=dlg;
+//        		dlg.setVisible(true);
+//        		stopReason = ((Integer)optPane.getValue()).intValue();
+//				
+//			}
+//		});
+//		StopThread.start();	
+        
+        startControlThread();
         
 		
-        
-        for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {     //align slices after reference slice.
-        	
+        //int i;
+        //Random rand = new Random(); 
+        //for (int i_slice = refSlice + 1; i_slice < stack.getSize() + 1; i_slice++) {     //align slices after reference slice.
+		for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {     //align slices after reference slice.
+        	//i=doRandomAnalysis?rand.nextInt(stack.getSize() + 1 - refSlice) + refSlice:i_slice;
         	if (!StopThread.isAlive()) {
-        		if (saveFlatten){
-                	
-                	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
-                }
-        		new WaitForUserDialog("Bending Crystal Track", "The track is finished.").show();
-        		
-        		return;
+        		if (stopReason == 0) {
+	        		if (saveFlatten){
+	                	
+	                	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
+	                }
+	        		new WaitForUserDialog("Bending Crystal Track", "The track is finished.").show();
+	        		
+	        		return;
+        		} else {
+        			if (!selectPoints(true)) return;
+        			startControlThread();
+        		}
         	}
         	Opener opener=null;  
 			String imageFilePath="";
@@ -932,7 +1053,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 					if (matchresult==2) {
 						
 						if (StopDlg!=null) {
-				        	StopDlg.close();
+				        	StopDlg.dispose();//.close();
 				        	try {
 								StopThread.join();
 							} catch (InterruptedException e) {
@@ -941,6 +1062,9 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 							}
 				        }
 						return;
+					}
+					if (matchresult==3) {
+						selectPoints(true);
 					}
 		            
 		            
@@ -1010,7 +1134,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         
         
         if (StopDlg!=null) {
-        	StopDlg.close();
+        	StopDlg.dispose();//.close();
         	try {
 				StopThread.join();
 			} catch (InterruptedException e) {
@@ -1041,21 +1165,22 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         }
         
         
-        Thread monitorThread = new Thread(new Runnable()
-		{
-        	@Override
-			public void run() 
-			{
-        		WaitForUserDialog dlg = new WaitForUserDialog("Waiting for new images...", "Press OK to stop monitoring the folder");
-				
-				
-        		dlg.setName("MonitorThread");
-        		MonitorDlg=dlg;
-        		dlg.show();
-				
-			}
-		});
-		monitorThread.start();	
+//        Thread monitorThread = new Thread(new Runnable()
+//		{
+//        	@Override
+//			public void run() 
+//			{
+//        		WaitForUserDialog dlg = new WaitForUserDialog("Waiting for new images...", "Press OK to stop monitoring the folder");
+//				
+//				
+//        		dlg.setName("MonitorThread");
+//        		MonitorDlg=dlg;
+//        		dlg.show();
+//				
+//			}
+//		});
+//		monitorThread.start();	
+        startControlThread();
 		
 		synchronized (this){
 			try {
@@ -1066,9 +1191,20 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 				}
 		}
 			
-	        while (monitorThread.isAlive()) {
+	        while (true) {
+	        	if (!StopThread.isAlive()){
+		        	if (stopReason == 0) {
+		        		break;
+		        		
+		        		
+	        		} else {
+	        			if (!selectPoints(true)) break;
+	        			startControlThread();
+	        		}
+	        	}
 	        	
-	            
+	        	
+	        	
 	        	
 	            	File[] fileList = (new File(directory)).listFiles();
 	            	if (fileList != null) {
@@ -1079,12 +1215,12 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 		            	
 		            	
 		            	int c = 0;
-		            	for (int i = 0; i < fileList.length; i++)
-		            		if (fileList[i].isFile())
-		            			tmplist[c++] = fileList[i].getName();
+		            	for (int i_file = 0; i_file < fileList.length; i_file++)
+		            		if (fileList[i_file].isFile())
+		            			tmplist[c++] = fileList[i_file].getName();
 		            	if (c>0) {
 			            	String[] list = new String[c];
-			            	for (int i = 0; i < c; i++) list[i] = tmplist[i];
+			            	for (int i_file = 0; i_file < c; i_file++) list[i_file] = tmplist[i_file];
 			            	
 			
 			            	// Now exclude non-image files as per the ImageJ FolderOpener
@@ -1110,7 +1246,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 				            				for (int j = foundPosition+1; j<imageList.length;j++)
 				            				{
 				            					
-				            					if (!monitorThread.isAlive()) break;
+				            					if (!StopThread.isAlive()) break;
 				            					
 				            					Opener opener = new Opener();  
 				            					String imageFilePath = directory+imageList[j];
@@ -1146,10 +1282,10 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 					            						continue;
 					            						}
 					            						if (matchresult==2) {
-					            							if (MonitorDlg!=null) {
-					            					        	MonitorDlg.close();
+					            							if (StopDlg!=null) {
+					            					        	StopDlg.dispose();//.close();
 					            					        	try {
-					            									monitorThread.join();
+					            									StopThread.join();
 					            								} catch (InterruptedException e) {
 					            									// TODO Auto-generated catch block
 					            									e.printStackTrace();
@@ -1157,7 +1293,9 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 					            					        }
 					            							return;
 					            						}
-					            						
+					            						if (matchresult==3) {
+					            							selectPoints(true);
+					            						}
 						            					
 						            		            
 						            		            if (showRT) {
@@ -1355,23 +1493,25 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	
 	private int failureQuestionDlg(int place) {
 		Object[] options1 = { "Keep the result", "Skip the frame",
-        "Stop tracking" };
+        "Stop tracking", "Reselect points" };
 		String placeName = (place==0?"holder":(place==1?"free end":"middle part"));  
 		JPanel panel = new JPanel();
 		panel.add(new JLabel("<html>Match of the "+placeName+" is poor."
 				+ "<br>Select one of the possibilities:"
 				+ "<br>1. Accept the match and continue"
 				+ "<br>2. Skip this frame and continue"
-				+ "<br>3. Stop the tracking</html>"));
+				+ "<br>3. Stop the tracking"
+				+ "<br>4. Reselect points</html>"));
 		
 
 		imgWindow.toFront();
 		int result = JOptionPane.showOptionDialog(null, panel, "Match is poor",
-        JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE,
+        JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE,
         null, options1, null);
-		if (result== JOptionPane.YES_OPTION) return 0;
-		if (result== JOptionPane.NO_OPTION) return 1;
-		return 2;
+		if (result== JOptionPane.CLOSED_OPTION) return 1;
+		//if (result== JOptionPane.NO_OPTION) return 1;
+		//return 2;
+		return result;
 	}
 
     private int analyzeSlice(int slice, ImageProcessor slice_proc) {
@@ -1515,7 +1655,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         att_mideal= doMatch_test(holder_ref.getProcessor(),(method==0?2:method));
         coord_res = doMatch_coord_res(holder_tar.getProcessor(), holder_ref.getProcessor(), method, subPixel, null);
         
-        boolean ignoreFrame=false, stopTracking=false;
+        boolean ignoreFrame=false, stopTracking=false, reselectPoints=false;
         if (!testMatchResult(coord_res[2], att_mideal, method, coord_res[0], coord_res[1], sArea*2, Math.min(holder_rect.width, holder_rect.height))) { ///////// The holder is not found...
         	if (sArea!=0) {										  ///////// Let's try global search if it was local search before
         		
@@ -1558,6 +1698,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         			if (failureAnswer==0) adjustThreshold(coord_res[2], att_mideal, method);
         			ignoreFrame = (failureAnswer==1);
         			stopTracking = (failureAnswer==2);
+        			reselectPoints = (failureAnswer==3);
         		} else {												///////////// The holder was found shifted. Shift search areas and continue
         			
         			        free_tar = new ImagePlus("",slice_proc);
@@ -1633,11 +1774,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         		if (failureAnswer==0) adjustThreshold(coord_res[2], att_mideal, method);
     			ignoreFrame = (failureAnswer==1);
     			stopTracking = (failureAnswer==2);
+    			reselectPoints = (failureAnswer==3);
         	}
         }
         
         if (ignoreFrame) return 1;
         if (stopTracking) return 2;
+        if (reselectPoints) return 3;
         
         attEnd_matchRes.add(coord_res[2]);
         
@@ -1779,11 +1922,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	    				if (failureAnswer==0) adjustThreshold(coord_res[2], free_mideal, method);
 	        			ignoreFrame = (failureAnswer==1);
 	        			stopTracking = (failureAnswer==2);
+	        			reselectPoints = (failureAnswer==3);
     				}
         		}
     			
     			if (ignoreFrame) return 1;
     	        if (stopTracking) return 2;
+    	        if (reselectPoints) return 3;
  
     	        if (iter>0) freeEnd_matchRes.remove(freeEnd_matchRes.size()-1);
     			freeEnd_matchRes.add(coord_res[2]);
@@ -1964,11 +2109,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 					if (failureAnswer==0) adjustThreshold(coord_res[2], mid_mideal, method);
 	    			ignoreFrame = (failureAnswer==1);
 	    			stopTracking = (failureAnswer==2);
+	    			reselectPoints = (failureAnswer==3);
 				}
     		}
 			
 			if (ignoreFrame) return 1;
 	        if (stopTracking) return 2;
+	        if (reselectPoints) return 3;
      		
 
 		
@@ -1985,7 +2132,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
             }
             
             // current bending is computed and checked for the convergence
-            calcBendingParams();
+            calcBendingParams(false);
             if (Math.abs(disX_free-dxtmp)<1.0e-5 && Math.abs(disY_free-dytmp)<1.0e-5) break;
             dxtmp=disX_free;
             dytmp=disY_free;
@@ -2116,13 +2263,18 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 		overlay.addElement(freeroi);
 		
        
+		for(ImagePlus refBin : refBinaryFrames) {
+        	ImageRoi ref_ImageRoi = new ImageRoi((int)disX_holder, (int)disY_holder,refBin.getProcessor());
+	        ref_ImageRoi.setOpacity(0.2);
+	        ref_ImageRoi.setZeroTransparent(true);
+	        overlay.addElement(ref_ImageRoi);
+        }
         
         
-        
-        ImageRoi ref_ImageRoi = new ImageRoi((int)disX_holder, (int)disY_holder,refImageBinary.getProcessor());
-        ref_ImageRoi.setOpacity(0.3);
-        ref_ImageRoi.setZeroTransparent(true);
-        overlay.addElement(ref_ImageRoi);
+//        ImageRoi ref_ImageRoi = new ImageRoi((int)disX_holder, (int)disY_holder,refImageBinary.getProcessor());
+//        ref_ImageRoi.setOpacity(0.3);
+//        ref_ImageRoi.setZeroTransparent(true);
+//        overlay.addElement(ref_ImageRoi);
         
         imp.setSlice(slice);
         
@@ -2187,7 +2339,9 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     	}
     }
     
-    private void calcBendingParams() {
+    private void calcBendingParams(boolean reselect) {
+    	
+    	
     	
     	double H_x=refX_free+disX_free-(refX_att+disX_holder),
           	   H_y=refY_free+disY_free-(refY_att+disY_holder),
@@ -2218,6 +2372,13 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
      	if (curvature!=0.0) cr_length=Math.abs(bending_angle/curvature);
      	else cr_length=H;
      	if (length_ini==0.0) length_ini=cr_length;
+     	if (reselect) {
+     		
+     		double  oldL0 = length_ini;
+     		length_ini=cr_length/(1.0 + deform_list.get(deform_list.size()-1));
+     		
+     		IJ.showMessage("Initial length is changed from "+oldL0+ "\nto "+length_ini+"\nas the result of new selection");
+     	}
         deformation=(cr_length-length_ini)/length_ini;
     }
 
@@ -2315,10 +2476,10 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	*/
 	public static Mat toMatcv(BufferedImage bufImage) {
 
-	    
-	    ToMat matConverter = new OpenCVFrameConverter.ToMat();
-	    Java2DFrameConverter java2dConverter = new Java2DFrameConverter();
-	    Mat mat =  matConverter.convert(java2dConverter.convert(bufImage));
+		Mat mat =  Java2DFrameUtils.toMat(bufImage);
+//		OpenCVFrameConverter.ToMat matConverter = new OpenCVFrameConverter.ToMat();
+//	    Java2DFrameConverter java2dConverter = new Java2DFrameConverter();
+//	    Mat mat =  matConverter.convert(java2dConverter.convert(bufImage));
 	    return mat;
 	}
 	
