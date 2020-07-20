@@ -10,12 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import org.bytedeco.javacpp.*;
-import org.bytedeco.javacv.Java2DFrameConverter;
 import org.bytedeco.javacv.Java2DFrameUtils;
-import org.bytedeco.javacv.OpenCVFrameConverter;
-import org.bytedeco.javacv.OpenCVFrameConverter.ToMat;
-
-
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
@@ -34,7 +29,6 @@ import java.util.Hashtable;
 //import java.util.Random;
 import java.util.Set;
 
-import javax.imageio.ImageIO;
 //import javax.swing.Icon;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
