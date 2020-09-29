@@ -8,13 +8,13 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>29.0.0-beta-3</version>
+		<version>29.2.1</version>
 	<relativePath />
 	</parent>
 
 	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Bending_Crystal_Track</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.2.1</version>
 	
 	<name>Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>

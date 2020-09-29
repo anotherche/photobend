@@ -6,6 +6,8 @@ import ij.gui.*;
 import ij.io.*;
 
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -20,6 +22,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 import ij.plugin.FolderOpener;
+import ij.plugin.PlugIn;
 import ij.plugin.filter.*;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
@@ -175,13 +178,57 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 
 	}
 	
-    public int setup(String arg, ImagePlus imp) {
+	private boolean CheckJavaCV(String components) {
+		String javaCVInstallCommand = "Install JavaCV libraries";
+    	Hashtable table = Menus.getCommands();
+		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
+		if (javaCVInstallClassName.endsWith("\")")) {
+			int argStart = javaCVInstallClassName.lastIndexOf("(\"");
+			if (argStart>0) {
+				javaCVInstallClassName = javaCVInstallClassName.substring(0, argStart);
+			}
+		}
+		String javaCVInstallNotFound = "JavaCV install plugin is not found. Will try to run without JavaCV installation check.";
+		boolean doRestart = false;
+		if (javaCVInstallClassName!=null) {
+			
+			try {
+				Class c = Class.forName(javaCVInstallClassName);
+				Field restartRequired = c.getField("restartRequired");
+				doRestart = (boolean)restartRequired.get(null);
+				if (doRestart){
+					IJ.showMessage("ImageJ was not restarted after JavaCV installation!");
+					return false;
+				}
+				Method mCheckJavaCV = c.getMethod("CheckJavaCV", String.class, boolean.class, boolean.class);
+				mCheckJavaCV.invoke(null, components, false, false);
+				doRestart = (boolean)restartRequired.get(null);
+				if (doRestart){
+					return false;
+				}
+			} 
+			catch (Exception e) {
+				IJ.log(javaCVInstallNotFound);
+				return true;
+			}
+		}
+		else {
+			IJ.log(javaCVInstallNotFound);
+		}
+		return true;
+	}
+    
+	public int setup(String arg, ImagePlus imp) {
+    	
+		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
+    	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
+    	
+    	if (!CheckJavaCV("opencv openblas ffmpeg")){
+    		stopPlugin=true;
+            return returnMask;
+    	}
     	
     	
-    	
-    	
-    	
-    	int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	GenericDialog pluginMode = new GenericDialog("Bending Crystal Track");
     	pluginMode.addMessage("Choose from the image source type - video (experimental) or time lapse series");
     	String[] sourceTypes = new String[]{"Time lapse series", "Video file"};
@@ -257,7 +304,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     			IJ.run(videoReadCommand);
     		}
         	this.imp = WindowManager.getCurrentImage();
-        	if (this.imp.getProperty("stack_source_type")==null ||
+        	if (this.imp == null || this.imp.getProperty("stack_source_type")==null ||
         			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
     			stopPlugin=true;
     			return returnMask;
@@ -793,6 +840,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	IJ.showMessage("Error", "Only virtual stacks are supported");
             return;
         }
+        
+        
         
         if (videoInput){
         	
