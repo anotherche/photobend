@@ -6,8 +6,6 @@ import ij.gui.*;
 import ij.io.*;
 
 import java.io.*;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -22,8 +20,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 
 import ij.plugin.FolderOpener;
-import ij.plugin.PlugIn;
 import ij.plugin.filter.*;
+import ij.plugin.frame.Recorder;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -178,52 +176,94 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 
 	}
 	
-	private boolean CheckJavaCV(String components) {
+//	private boolean CheckJavaCV(String components) {
+//		String javaCVInstallCommand = "Install JavaCV libraries";
+//    	Hashtable table = Menus.getCommands();
+//		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
+//		if (javaCVInstallClassName.endsWith("\")")) {
+//			int argStart = javaCVInstallClassName.lastIndexOf("(\"");
+//			if (argStart>0) {
+//				javaCVInstallClassName = javaCVInstallClassName.substring(0, argStart);
+//			}
+//		}
+//		String javaCVInstallNotFound = "JavaCV install plugin is not found. Will try to run without JavaCV installation check.";
+//		boolean doRestart = false;
+//		if (javaCVInstallClassName!=null) {
+//			
+//			try {
+//				Class c = Class.forName(javaCVInstallClassName);
+//				Field restartRequired = c.getField("restartRequired");
+//				doRestart = (boolean)restartRequired.get(null);
+//				if (doRestart){
+//					IJ.showMessage("ImageJ was not restarted after JavaCV installation!");
+//					return false;
+//				}
+//				Method mCheckJavaCV = c.getMethod("CheckJavaCV", String.class, boolean.class, boolean.class);
+//				mCheckJavaCV.invoke(null, components, false, false);
+//				doRestart = (boolean)restartRequired.get(null);
+//				if (doRestart){
+//					return false;
+//				}
+//			} 
+//			catch (Exception e) {
+//				IJ.log(javaCVInstallNotFound);
+//				return true;
+//			}
+//		}
+//		else {
+//			IJ.log(javaCVInstallNotFound);
+//		}
+//		return true;
+//	}
+	
+	private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+		
 		String javaCVInstallCommand = "Install JavaCV libraries";
     	Hashtable table = Menus.getCommands();
 		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
-		if (javaCVInstallClassName.endsWith("\")")) {
-			int argStart = javaCVInstallClassName.lastIndexOf("(\"");
-			if (argStart>0) {
-				javaCVInstallClassName = javaCVInstallClassName.substring(0, argStart);
-			}
+		if (javaCVInstallClassName==null) {
+			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
+					+"Please install it from from JavaCVInstaller update site:\n"
+					+"https://sites.imagej.net/JavaCVInstaller/");
+			return false;
 		}
-		String javaCVInstallNotFound = "JavaCV install plugin is not found. Will try to run without JavaCV installation check.";
-		boolean doRestart = false;
-		if (javaCVInstallClassName!=null) {
-			
-			try {
-				Class c = Class.forName(javaCVInstallClassName);
-				Field restartRequired = c.getField("restartRequired");
-				doRestart = (boolean)restartRequired.get(null);
-				if (doRestart){
-					IJ.showMessage("ImageJ was not restarted after JavaCV installation!");
-					return false;
-				}
-				Method mCheckJavaCV = c.getMethod("CheckJavaCV", String.class, boolean.class, boolean.class);
-				mCheckJavaCV.invoke(null, components, false, false);
-				doRestart = (boolean)restartRequired.get(null);
-				if (doRestart){
-					return false;
-				}
-			} 
-			catch (Exception e) {
-				IJ.log(javaCVInstallNotFound);
+		
+		String installerCommand = "version="
+				+ version
+				+ " select_installation_option=[Install missing] "
+				+ (treatAsMinVer?"treat_selected_version_as_minimal_required ":"")
+				+ components;
+
+		boolean saveRecorder = Recorder.record;		//save state of the macro Recorder
+		Recorder.record = false;					//disable the macro Recorder to avoid the JavaCV installer plugin being recorded instead of this plugin
+		String saveMacroOptions = Macro.getOptions();
+		IJ.run("Install JavaCV libraries", installerCommand);
+		if (saveMacroOptions != null) Macro.setOptions(saveMacroOptions);
+		Recorder.record = saveRecorder;				//restore the state of the macro Recorder
+				
+		String result = Prefs.get("javacv.install_result", "");
+		String launcherResult = Prefs.get("javacv.install_result_launcher", "");
+		if (!(result.equalsIgnoreCase("success") && launcherResult.equalsIgnoreCase("success"))) {
+			if(result.indexOf("restart")>-1 || launcherResult.indexOf("restart")>-1) {
+				IJ.log("Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
+				return false;
+			} else {
+				IJ.log("JavaCV installation failed for above reason. Trying to use JavaCV as is...");
 				return true;
 			}
 		}
-		else {
-			IJ.log(javaCVInstallNotFound);
-		}
 		return true;
 	}
+	
     
 	public int setup(String arg, ImagePlus imp) {
     	
 		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
     	
-    	if (!CheckJavaCV("opencv openblas ffmpeg")){
+    	//if (!CheckJavaCV("opencv openblas ffmpeg"))
+		if (!CheckJavaCV("1.5", true, "opencv"))
+    	{
     		stopPlugin=true;
             return returnMask;
     	}
@@ -295,14 +335,18 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	String videoReadCommand = "Using FFmpeg...";
         	Hashtable table = Menus.getCommands();
     		String className = (String)table.get(videoReadCommand);
-    		if (className!=null) IJ.run(videoReadCommand);
-    		else {
+    		if (className==null) {
     			videoReadCommand = "Compressed video";
     			className = (String)table.get(videoReadCommand);
-    			if (className==null)
-    				IJ.showMessage("FFmpeg_FrameReader plugin is necessary to import compressed video. \nIt can be intalled from the update site http://sites.imagej.net/Anotherche.");
-    			IJ.run(videoReadCommand);
+    			if (className==null) {
+    				videoReadCommand = "Import Movie Using FFmpeg...";
+        			className = (String)table.get(videoReadCommand);
+        			if (className==null)
+        				IJ.showMessage("FFmpeg_Video plugin is necessary to import compressed video. \nIt can be intalled from the update site http://sites.imagej.net/VideoImportExport.");
+    			}
     		}
+    		
+    		
         	this.imp = WindowManager.getCurrentImage();
         	if (this.imp == null || this.imp.getProperty("stack_source_type")==null ||
         			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
@@ -900,6 +944,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         width = imp.getWidth();
         height = imp.getHeight();
         refBitDepth = imp.getBitDepth();
+//        IJ.log("ref bit depth "+refBitDepth);
         refBinaryFrames = new ArrayList<ImagePlus>(0);
 		
 		
@@ -1066,8 +1111,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 			if (!videoInput){
 				opener = new Opener();  
 				imageFilePath = directory+stack.getSliceLabel(i);
-
 				imp_new = opener.openImage(imageFilePath);
+//				IJ.log("ref bit depth "+imp_new.getBitDepth());
 			}
         	
 			if (videoInput || ((new File(imageFilePath)).isFile() 

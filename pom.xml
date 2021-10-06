@@ -14,7 +14,7 @@
 
 	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Bending_Crystal_Track</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 	
 	<name>Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
@@ -86,8 +86,8 @@
 		<main-class>Bending_Crystal_Track</main-class>
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
-		<scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
-		
+
+		<scijava.app.subdirectory>plugins\PhotoBend</scijava.app.subdirectory>
 	</properties>
 
 	<repositories>
@@ -280,10 +280,12 @@
    					<artifactId>ffmpeg</artifactId>
    				</exclusion>
    			</exclusions>
+   			<version>1.5</version>
 		</dependency>
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
 			<artifactId>metadata-extractor</artifactId>
+			<version>2.14.0</version>
 		</dependency>
 		<dependency>
 			<groupId>net.imagej</groupId>
@@ -372,18 +374,4 @@
 		</plugins>
 	</build>
 
-	<dependencyManagement>
-		<dependencies>
-			<dependency>
-				<groupId>org.bytedeco</groupId>
-				<artifactId>javacv-platform</artifactId>
-				<version>1.5.3</version>
-			</dependency>
-			<dependency>
-				<groupId>com.drewnoakes</groupId>
-				<artifactId>metadata-extractor</artifactId>
-				<version>2.14.0</version>
-			</dependency>
-		</dependencies>
-	</dependencyManagement>
 </project>
