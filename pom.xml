@@ -8,13 +8,13 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>29.2.1</version>
+		<version>36.0.0</version>
 	<relativePath />
 	</parent>
 
 	<groupId>anotherche.plugins.imagej</groupId> 
     <artifactId>Bending_Crystal_Track</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
 	
 	<name>Bending_Crystal_Track.jar</name>
 	<description>Tracks bending needle crystal in stack. ImageJ plugin.</description>
@@ -87,7 +87,6 @@
 		<license.licenseName>gpl</license.licenseName>
 		<license.copyrightOwners>ISSCM SB RAS</license.copyrightOwners>
 
-		<scijava.app.subdirectory>plugins\PhotoBend</scijava.app.subdirectory>
 	</properties>
 
 	<repositories>
@@ -279,17 +278,25 @@
    					<groupId>org.bytedeco</groupId>
    					<artifactId>ffmpeg</artifactId>
    				</exclusion>
+   				<exclusion>
+   					<groupId>org.openjfx</groupId>
+   					<artifactId>javafx-graphics</artifactId>
+   				</exclusion>
    			</exclusions>
-   			<version>1.5</version>
+   			<version>1.5.8</version>
 		</dependency>
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
 			<artifactId>metadata-extractor</artifactId>
-			<version>2.14.0</version>
+			<version>2.18.0</version>
 		</dependency>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>ij</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej-updater</artifactId>
 		</dependency>
 	</dependencies>
 
@@ -310,7 +317,7 @@
 	            </goals>
 	            <configuration>
 	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
-	              
+	              <ignoreDependencies>true</ignoreDependencies>
 	              <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
 <!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
 	            </configuration>

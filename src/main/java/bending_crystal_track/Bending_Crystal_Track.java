@@ -2,6 +2,7 @@ package bending_crystal_track;
 
 import ij.*;
 import ij.process.*;
+import net.imagej.updater.CommandLine;
 import ij.gui.*;
 import ij.io.*;
 
@@ -25,30 +26,23 @@ import ij.plugin.frame.Recorder;
 import ij.measure.ResultsTable;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
-//import java.util.Random;
 import java.util.Set;
 
-//import javax.swing.Icon;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
-//import static org.bytedeco.javacpp.opencv_core.*;
-//import static org.bytedeco.javacpp.opencv_imgproc.*;
 import org.bytedeco.opencv.opencv_core.*;
 import org.bytedeco.opencv.opencv_core.Point;
-//import org.bytedeco.opencv.opencv_imgproc.*;
-
 import static org.bytedeco.opencv.global.opencv_core.*;
 import static org.bytedeco.opencv.global.opencv_imgproc.*;
-
-
 import org.bytedeco.javacpp.indexer.*;
-//import org.bytedeco.javacpp.opencv_core.Mat;
-//import org.bytedeco.javacpp.opencv_core.Point;
+
+import org.scijava.util.AppUtils;
 
 
 /* This is an ImageJ plugin providing tracking of 
@@ -77,6 +71,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 		    		 "M4V", "SVI", "3GP", "3G2", "MXF", "ROQ", "NSV", "FLV", "F4V", 
 		    		 "F4P", "F4A", "F4B" }
 		));
+	
+	private static final String pluginName = "Bending Crystal Track";
 	
     ImagePlus imp, ref_Image, refImageBinary, free_ref, free_tpl, holder_ref, mid_ref, mid_tpl;
     ArrayList<ImagePlus> refBinaryFrames;
@@ -107,7 +103,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     
     ImagePlus plotImage, plotDefImage;
     boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, saveFlatten=false, videoInput=false, stopPlugin=false,
-    		useTimeStamps=true;
+    		useTimeStamps=true, javacvInstalled = false;
     volatile JDialog StopDlg=null;
     //volatile WaitForUserDialog MonitorDlg=null;
     volatile int stopReason = -1;
@@ -216,15 +212,37 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 //		return true;
 //	}
 	
-	private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
 		
 		String javaCVInstallCommand = "Install JavaCV libraries";
     	Hashtable table = Menus.getCommands();
 		String javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
 		if (javaCVInstallClassName==null) {
-			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
-					+"Please install it from from JavaCVInstaller update site:\n"
-					+"https://sites.imagej.net/JavaCVInstaller/");
+//			IJ.showMessage("JavaCV check", "JavaCV Installer not found.\n"
+//					+"Please install it from from JavaCVInstaller update site:\n"
+//					+"https://sites.imagej.net/JavaCVInstaller/");
+			
+			int result = JOptionPane.showConfirmDialog(null,
+					"<html><h2>JavaCV Installer not found.</h2>"
+							+ "<br>Please install it from from JavaCVInstaller update site:"
+							+ "<br>https://sites.imagej.net/JavaCVInstaller/"
+							+ "<br>Do you whant it to be installed now for you?"
+							+ "<br><i>you need to restart ImageJ after the install</i></html>",
+							"JavaCV check",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+			if (result == JOptionPane.YES_OPTION) {
+				net.imagej.updater.CommandLine updCmd = new net.imagej.updater.CommandLine(AppUtils.getBaseDirectory("ij.dir", CommandLine.class, "updater"), 80);
+				updCmd.addOrEditUploadSite("JavaCVInstaller", "https://sites.imagej.net/JavaCVInstaller/", null, null, false);
+				net.imagej.updater.CommandLine updCmd2 = new net.imagej.updater.CommandLine(AppUtils.getBaseDirectory("ij.dir", CommandLine.class, "updater"), 80);
+				updCmd2.update(Arrays.asList("plugins/JavaCV_Installer/JavaCV_Installer.jar"));
+				IJ.run("Refresh Menus");
+				table = Menus.getCommands();
+				javaCVInstallClassName = (String)table.get(javaCVInstallCommand);
+				if (javaCVInstallClassName==null) {
+					IJ.showMessage("JavaCV check", "Failed to install JavaCV Installer plugin.\nPlease install it manually.");
+				}
+			}
 			return false;
 		}
 		
@@ -248,7 +266,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 				IJ.log("Please restart ImageJ to proceed with installation of necessary JavaCV libraries.");
 				return false;
 			} else {
-				IJ.log("JavaCV installation failed for above reason. Trying to use JavaCV as is...");
+				IJ.log("JavaCV installation failed. Trying to use JavaCV as is...");
 				return true;
 			}
 		}
@@ -261,15 +279,15 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
     	
-    	//if (!CheckJavaCV("opencv openblas ffmpeg"))
-		if (!CheckJavaCV("1.5", true, "opencv"))
+		javacvInstalled = CheckJavaCV("1.5", true, "opencv");
+		if (!javacvInstalled)
     	{
     		stopPlugin=true;
             return returnMask;
     	}
     	
     	
-    	GenericDialog pluginMode = new GenericDialog("Bending Crystal Track");
+    	GenericDialog pluginMode = new GenericDialog(pluginName);
     	pluginMode.addMessage("Choose from the image source type - video (experimental) or time lapse series");
     	String[] sourceTypes = new String[]{"Time lapse series", "Video file"};
     	pluginMode.addRadioButtonGroup("Source Type", sourceTypes, 2, 1, "Time lapse series");
@@ -309,7 +327,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
             	}
-        		GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        		GenericDialog gd = new GenericDialog(pluginName);
         		gd.addMessage("Select the video stack or press Cancel to open another video");
         		gd.addChoice("List of open video stacks", videoStacks.toArray(new String[0]), videoStacks.get(0));
         		gd.showDialog();
@@ -320,17 +338,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     			}
         	} 
 
-//        		OpenDialog	od = new OpenDialog("Open Video File", "");
-//
-//
-//        		if (od.getFileName() != null) {
-//        			//IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] importquiet=true");
-//        			IJ.run("Using FFmpeg...", "open=["+od.getPath()+"]");
-//        			this.imp = WindowManager.getCurrentImage();
-//        		} else {
-//        			stopPlugin=true;
-//        			return returnMask;
-//        		}
+
         	
         	String videoReadCommand = "Using FFmpeg...";
         	Hashtable table = Menus.getCommands();
@@ -346,8 +354,20 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     			}
     		}
     		
+    		OpenDialog	od = new OpenDialog("Open Video File", "");
+
+
+    		if (od.getFileName() != null) {
+    			//IJ.run("Using FFmpeg...", "open=["+od.getPath()+"] importquiet=true");
+    			IJ.run(videoReadCommand, "open=["+od.getPath()+"]");
+    			this.imp = WindowManager.getCurrentImage();
+    		} else {
+    			stopPlugin=true;
+    			return returnMask;
+    		}
     		
-        	this.imp = WindowManager.getCurrentImage();
+    		
+        	//this.imp = WindowManager.getCurrentImage();
         	if (this.imp == null || this.imp.getProperty("stack_source_type")==null ||
         			!this.imp.getProperty("stack_source_type").toString().equals("ffmpeg_frame_grabber")) {
     			stopPlugin=true;
@@ -382,7 +402,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     				WindowManager.setCurrentWindow(this.imp.getWindow());
     				return returnMask;
             	}
-        		GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        		GenericDialog gd = new GenericDialog(pluginName);
         		gd.addMessage("Select image sequence stack or press Cancel to open another stack");
         		gd.addChoice("List of open virtual stacks", imgStacks.toArray(new String[0]), imgStacks.get(0));
         		gd.showDialog();
@@ -864,7 +884,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	public void run(ImageProcessor ip) {
 
 		if (stopPlugin) {
-			IJ.showMessage("Error", "No source chosen. Stopping.");
+			if (javacvInstalled) IJ.showMessage("Error", "No source chosen. Stopping.");
 			return;
 		}
 		
@@ -896,7 +916,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         		impliedFrameRate=1.0;
         		fpsDetected=false;
         	}
-        	GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        	GenericDialog gd = new GenericDialog(pluginName);
         	gd.addMessage("Please chose the method of getting the timestamp info\n"
         			+ "\"Frame timestapm\" (default) is useful in case of variable frame rate;\n"
         			+ "\"Calculate from frame rate\" works with constant frame rate video and allows to change the frame rate value.");
@@ -979,7 +999,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 			rt.setDecimalPlaces(8, 6);
 			
 			rt.show("Results");
-            rt.showRowNumbers(false);
+            //rt.showRowNumbers(false);
 
         }
         
@@ -994,13 +1014,8 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         	name = stack.getSliceLabel(refSlice);
         }
         
-//        if (doRandomAnalysis){
-//        	setAltTimeMeasure();
-//        	ExifTime=false;
-//        } else {
-        	first_shot_time = getShotTime(directory + name, refSlice);
-        	if (first_shot_time==null) ExifTime=false;
-//        }
+    	first_shot_time = getShotTime(directory + name, refSlice);
+    	if (first_shot_time==null) ExifTime=false;
     	
     	if (saveFlatten) {
     		
@@ -1032,7 +1047,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 			
             
 			rt.show("Results");
-            rt.showRowNumbers(false);
+            //rt.showRowNumbers(false);
             
             
             
@@ -1095,7 +1110,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 	                	
 	                	saveFlattenFrames(imp.getOriginalFileInfo().directory + "flatten"+File.separatorChar, 0, true);
 	                }
-	        		new WaitForUserDialog("Bending Crystal Track", "The track is finished.").show();
+	        		new WaitForUserDialog(pluginName, "The track is finished.").show();
 	        		
 	        		return;
         		} else {
@@ -1179,7 +1194,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 						
 		
 		                rt.show("Results");
-		                rt.showRowNumbers(false);
+		                //rt.showRowNumbers(false);
 		                
 		           
 		                
@@ -1406,7 +1421,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 						            						
 						            		                
 						            		                rt.show("Results");
-						            		                rt.showRowNumbers(false);
+						            		                //rt.showRowNumbers(false);
 						            		                
 						            		               
 						            		                
@@ -2485,7 +2500,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     	String[] methods = {"Square difference", "Normalized square difference", "Cross correlation", "Normalized cross correlation", "Correlation coefficient", "Normalized correlation coefficient"};
         //String[] itpMethods = {"Bilinear", "Bicubic"};
 
-        GenericDialog gd = new GenericDialog("Bending Crystal Track");
+        GenericDialog gd = new GenericDialog(pluginName);
         gd.addMessage("Only virtual stacks of time lapse images are supported currently.\n"
         		+ "Adjust the settings and follow the instructions to select templates to track.");
         gd.addChoice("Matching method", methods, methods[method]);
