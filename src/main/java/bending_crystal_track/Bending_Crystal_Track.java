@@ -96,18 +96,18 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
     	   full_angle, full_angle_ini,
     	   initial_angle,
     	   deformation=0.0;
-    double H0_x,H0_y;
+    double h0_x,h0_y;
     ArrayList<Double> curv_list, deform_list, time_list, freeEnd_matchRes, attEnd_matchRes, mid_matchRes ; 
     double curv_min=0.0, curv_max=0.0, def_min=0.0, def_max = 0.0;
     double free_mideal, att_mideal, mid_mideal;
     
     ImagePlus plotImage, plotDefImage;
-    boolean folderMonitoring=true, updateTemplates=false, ExifTime=true, saveFlatten=false, videoInput=false, stopPlugin=false,
+    boolean folderMonitoring=true, updateTemplates=false, exifTime=true, saveFlatten=false, videoInput=false, stopPlugin=false,
     		useTimeStamps=true, javacvInstalled = false;
-    volatile JDialog StopDlg=null;
+    volatile JDialog stopDlg=null;
     //volatile WaitForUserDialog MonitorDlg=null;
     volatile int stopReason = -1;
-    Thread StopThread;
+    Thread stopThread;
     
     // For movie sequence
     int movieFrameNum=0, previousFrameNum=0;
@@ -157,12 +157,12 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
         double std_length = gd.getNextNumber();
         refX_att = refX_free + (std_length*(refX_att - refX_free)/length_ini);
         refY_att = refY_free + (std_length*(refY_att - refY_free)/length_ini);
-        H0_x=refX_free-refX_att;
-        H0_y=refY_free-refY_att;
-        length_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
+        h0_x=refX_free-refX_att;
+        h0_y=refY_free-refY_att;
+        length_ini=Math.sqrt(h0_x*h0_x+h0_y*h0_y);
         hord_ini= length_ini;
         
-        full_angle_ini=Math.acos(H0_x/hord_ini);
+        full_angle_ini=Math.acos(h0_x/hord_ini);
         if (refY_free>refY_att) full_angle_ini=-full_angle_ini;
         
         refX_mid = (refX_free + refX_att)/2;
@@ -212,7 +212,7 @@ public class Bending_Crystal_Track implements PlugInFilter, DialogListener {
 //		return true;
 //	}
 	
-private boolean CheckJavaCV(String version, boolean treatAsMinVer, String components) {
+private boolean checkJavaCV(String version, boolean treatAsMinVer, String components) {
 		
 		String javaCVInstallCommand = "Install JavaCV libraries";
     	Hashtable table = Menus.getCommands();
@@ -279,7 +279,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 		int returnMask = NO_IMAGE_REQUIRED + DOES_8G + DOES_16 +  DOES_32 + DOES_RGB + STACK_REQUIRED;
     	//IJ.run("Install JavaCV libraries", "select=[Install missing] opencv openblas");
     	
-		javacvInstalled = CheckJavaCV("1.5", true, "opencv");
+		javacvInstalled = checkJavaCV("1.5", true, "opencv");
 		if (!javacvInstalled)
     	{
     		stopPlugin=true;
@@ -555,11 +555,11 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         refX_att=proi_att.getFloatPolygon().xpoints[0];
         refY_att=proi_att.getFloatPolygon().ypoints[0];
         
-        H0_x=refX_free-refX_att;
-        H0_y=refY_free-refY_att;
-        hord_ini=Math.sqrt(H0_x*H0_x+H0_y*H0_y);
+        h0_x=refX_free-refX_att;
+        h0_y=refY_free-refY_att;
+        hord_ini=Math.sqrt(h0_x*h0_x+h0_y*h0_y);
         
-        full_angle_ini=Math.acos(H0_x/hord_ini);
+        full_angle_ini=Math.acos(h0_x/hord_ini);
         if (refY_free>refY_att) full_angle_ini=-full_angle_ini;
         
         proi_att.setPointType(3);
@@ -821,7 +821,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
     }
     
     private void startControlThread() {
-    	StopThread = new Thread(new Runnable()
+    	stopThread = new Thread(new Runnable()
 		{
         	@Override
 			public void run() 
@@ -846,7 +846,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         		dlg.setName("StopThread");
         		dlg.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
         		
-        		StopDlg=dlg;
+        		stopDlg=dlg;
         		dlg.pack();
         		dlg.setLocation(10, 10);
         		dlg.setVisible(true);
@@ -854,7 +854,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         		
         		Object selectedValue = optPane.getValue();
         		dlg.dispose();
-        		StopDlg = null;
+        		stopDlg = null;
 
                 if(selectedValue == null){
                 	stopReason = 0;
@@ -877,7 +877,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 				
 			}
 		});
-		StopThread.start();	
+		stopThread.start();	
     }
 
     
@@ -1015,7 +1015,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         }
         
     	first_shot_time = getShotTime(directory + name, refSlice);
-    	if (first_shot_time==null) ExifTime=false;
+    	if (first_shot_time==null) exifTime=false;
     	
     	if (saveFlatten) {
     		
@@ -1104,7 +1104,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         //for (int i_slice = refSlice + 1; i_slice < stack.getSize() + 1; i_slice++) {     //align slices after reference slice.
 		for (int i = refSlice + 1; i < stack.getSize() + 1; i++) {     //align slices after reference slice.
         	//i=doRandomAnalysis?rand.nextInt(stack.getSize() + 1 - refSlice) + refSlice:i_slice;
-        	if (!StopThread.isAlive()) {
+        	if (!stopThread.isAlive()) {
         		if (stopReason == 0) {
 	        		if (saveFlatten){
 	                	
@@ -1155,10 +1155,10 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 					}
 					if (matchresult==2) {
 						
-						if (StopDlg!=null) {
-				        	StopDlg.dispose();//.close();
+						if (stopDlg!=null) {
+				        	stopDlg.dispose();//.close();
 				        	try {
-								StopThread.join();
+								stopThread.join();
 							} catch (InterruptedException e) {
 								// TODO Auto-generated catch block
 								e.printStackTrace();
@@ -1236,10 +1236,10 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
        
         
         
-        if (StopDlg!=null) {
-        	StopDlg.dispose();//.close();
+        if (stopDlg!=null) {
+        	stopDlg.dispose();//.close();
         	try {
-				StopThread.join();
+				stopThread.join();
 			} catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -1295,7 +1295,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 		}
 			
 	        while (true) {
-	        	if (!StopThread.isAlive()){
+	        	if (!stopThread.isAlive()){
 		        	if (stopReason == 0) {
 		        		break;
 		        		
@@ -1349,7 +1349,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 				            				for (int j = foundPosition+1; j<imageList.length;j++)
 				            				{
 				            					
-				            					if (!StopThread.isAlive()) break;
+				            					if (!stopThread.isAlive()) break;
 				            					
 				            					Opener opener = new Opener();  
 				            					String imageFilePath = directory+imageList[j];
@@ -1385,10 +1385,10 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
 					            						continue;
 					            						}
 					            						if (matchresult==2) {
-					            							if (StopDlg!=null) {
-					            					        	StopDlg.dispose();//.close();
+					            							if (stopDlg!=null) {
+					            					        	stopDlg.dispose();//.close();
 					            					        	try {
-					            									StopThread.join();
+					            									stopThread.join();
 					            								} catch (InterruptedException e) {
 					            									// TODO Auto-generated catch block
 					            									e.printStackTrace();
@@ -2245,7 +2245,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         
         // the creation time of the image is taken from the EXIF metadata or incremented by timeStep
         
-        if (ExifTime)
+        if (exifTime)
         {
         	Instant shot_time;
         	if(videoInput) shot_time = getShotTime("", slice);
@@ -2254,7 +2254,7 @@ private boolean CheckJavaCV(String version, boolean treatAsMinVer, String compon
         	if (shot_time!=null) seconds = Duration.between(first_shot_time, shot_time).toNanos()/1000000000.0;//(new Duration(first_shot_time,shot_time)).getMillis()/1000.0;
         	else 
         	{	
-        		ExifTime=false;
+        		exifTime=false;
         		if (seconds!=0.0) seconds+=timeStep;
         	}
         }
