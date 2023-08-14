@@ -301,13 +301,10 @@
 	</dependencies>
 
 	<build>
-		
 		<plugins>
-		
 			<plugin>
 	        <groupId>org.scijava</groupId>
 	        <artifactId>scijava-maven-plugin</artifactId>
-<!-- 	        <version>0.7.0</version> -->
 	        <executions>
 	          <execution>
 	            <id>populate-app</id>
@@ -316,47 +313,15 @@
 	              <goal>populate-app</goal>
 	            </goals>
 	            <configuration>
-	              <scijava.app.subdirectory>plugins/PhotoBend</scijava.app.subdirectory>
 	              <ignoreDependencies>true</ignoreDependencies>
-	              <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
-<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
+	              <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 	            </configuration>
 	          </execution>
-	          
-
-	          
-	          
 	        </executions>
 	        <configuration>
-	          <deleteOtherVersionsPolicy>never</deleteOtherVersionsPolicy>
-<!-- 	              	          <deleteOtherVersions>false</deleteOtherVersions> -->
+	          <deleteOtherVersionsPolicy>older</deleteOtherVersionsPolicy>
 	        </configuration>
 	      	</plugin>
-	     
-		
-			<plugin>
-				<artifactId>maven-jar-plugin</artifactId>
-				<configuration>
-					<connectionType>developerConnection</connectionType>
-					<archive>
-						<manifest>
-							<!-- My Classpath customization in the next two lines 
-							<addClasspath>true</addClasspath>
-                			<classpathPrefix>lib/</classpathPrefix>  -->
-							<mainClass>${main-class}</mainClass>
-							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-						</manifest>
-						<manifestEntries>
-        					<Implementation-Build>${buildNumber}</Implementation-Build>
-      					</manifestEntries>
-					</archive>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-release-plugin</artifactId>
-				
-			</plugin>
 			<plugin>
 		        <groupId>org.codehaus.mojo</groupId>
 		        <artifactId>buildnumber-maven-plugin</artifactId>
@@ -370,7 +335,7 @@
 		          </execution>
 		        </executions>
 		        <configuration>
-		          <!-- <doCheck>true</doCheck> -->
+		           <doCheck>true</doCheck> 
 		          	<doUpdate>true</doUpdate>
 		          	<format>{0,date,yyyy-MM-dd HH:mm:ss}</format>
       				<items>
