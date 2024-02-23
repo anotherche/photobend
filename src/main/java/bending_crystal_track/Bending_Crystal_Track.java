@@ -1039,6 +1039,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 			rt.addValue("Curvature", curvature_ini);
 			rt.addValue("Deformation", 0.0);
 			
+			
 			rt.setDecimalPlaces(2, 6);
 			rt.setDecimalPlaces(3, 6);
 			rt.setDecimalPlaces(4, 2);
@@ -1118,23 +1119,27 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
         			startControlThread();
         		}
         	}
-        	Opener opener=null;  
-			String imageFilePath="";
-			
-			ImagePlus imp_new=null;
+//        	Opener opener=null;  
+//			String imageFilePath="";
+//			ImagePlus imp_new=null;
         	
-			if (!videoInput){
-				opener = new Opener();  
-				imageFilePath = directory+stack.getSliceLabel(i);
-				imp_new = opener.openImage(imageFilePath);
-//				IJ.log("ref bit depth "+imp_new.getBitDepth());
-			}
+//			if (!videoInput){
+//				opener = new Opener();  
+//				imageFilePath = directory+stack.getSliceLabel(i);
+//				imp_new = opener.openImage(imageFilePath);
+//			}
         	
-			if (videoInput || ((new File(imageFilePath)).isFile() 
-					&& imp_new!=null 
-					&& imp_new.getWidth()==width 
-					&& imp_new.getHeight()==height 
-					&& imp_new.getBitDepth()==refBitDepth)){
+			Instant startTime = Instant.now();
+			ImageProcessor nextIp = imp.getProcessor();
+			if (videoInput || (//(new File(imageFilePath)).isFile() &&
+					nextIp!=null 
+					&& nextIp.getWidth()==width 
+					&& nextIp.getHeight()==height 
+					&& nextIp.getBitDepth()==refBitDepth)) {
+					//&& imp_new!=null 
+					//&& imp_new.getWidth()==width 
+					//&& imp_new.getHeight()==height 
+					//&& imp_new.getBitDepth()==refBitDepth)){
 
 				
 					double  tmp_disX_free=disX_free,
@@ -1143,7 +1148,13 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 							tmp_disY_holder=disY_holder,
 							tmp_disX_mid=disX_mid,
 							tmp_disY_mid=disY_mid;
-				    int matchresult = analyzeSlice(i, stack.getProcessor(i));
+					
+					
+					imp.setSliceWithoutUpdate(i);
+					//int matchresult = analyzeSlice(i, stack.getProcessor(i));
+					int matchresult = analyzeSlice(i, nextIp);
+					
+				    
 					if (matchresult==1) {
 							disX_free=tmp_disX_free;
 							disY_free=tmp_disY_free;
@@ -1208,29 +1219,29 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 		            if (deformation>def_max) def_max=deformation;
 		            if (deformation<def_min) def_min=deformation;
 		            
-		            double y_height=curv_max-curv_min;
-		            if (y_height==0.0) y_height=1.0;
-		            double y_min=curv_min-0.1*y_height,
-		            	   y_max=curv_max+0.1*y_height;
-		            Plot plot1 = new Plot("Curvature Plot","Time, s","Curvature");
-		            plot1.setLimits(0, seconds, y_min, y_max);
-		    		plot1.addPoints(time_list, curv_list, Plot.BOX);
-		    		ImageProcessor plotIp = plot1.getProcessor();
-		    		plotImage.setProcessor(null, plotIp);
-		    		
-		    		y_height=def_max-def_min;
-		            if (y_height==0.0) y_height=1.0;
-		            y_min=def_min-0.1*y_height;
-		            y_max=def_max+0.1*y_height;
-		             Plot plot2 = new Plot("Deformation Plot","Time, s","Deformation");
-		             plot2.setLimits(0, seconds, y_min, y_max);
-		      		plot2.addPoints(time_list, deform_list, Plot.BOX);
-		     		ImageProcessor plotIp2 = plot2.getProcessor();
-		     		plotDefImage.setProcessor(null, plotIp2);
+					
+					  double y_height=curv_max-curv_min; if (y_height==0.0) y_height=1.0; double
+					  y_min=curv_min-0.1*y_height, y_max=curv_max+0.1*y_height;
+					  
+					  Plot plot1 = new Plot("Curvature Plot","Time, s","Curvature");
+					  plot1.setLimits(0, seconds, y_min, y_max); plot1.addPoints(time_list,
+					  curv_list, Plot.BOX); ImageProcessor plotIp = plot1.getProcessor();
+					  plotImage.setProcessor(null, plotIp);
+					  
+					  y_height=def_max-def_min; if (y_height==0.0) y_height=1.0;
+					  y_min=def_min-0.1*y_height; y_max=def_max+0.1*y_height; Plot plot2 = new
+					  Plot("Deformation Plot","Time, s","Deformation"); plot2.setLimits(0, seconds,
+					  y_min, y_max); plot2.addPoints(time_list, deform_list, Plot.BOX);
+					  ImageProcessor plotIp2 = plot2.getProcessor();
+					  plotDefImage.setProcessor(null, plotIp2);
+					 
         	} else {
         		stack.deleteSlice(i--);
         		imp.setStack(stack);
         	}
+			Instant finishTime = Instant.now();
+			long timeElapsed = Duration.between(startTime, finishTime).toMillis();
+			IJ.showStatus(timeElapsed+" ms");
             
         }
        
@@ -1363,7 +1374,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 					            					
 					            					imp.setStack(vstack);
 					            					
-					            					imp.setSlice(vstack.getSize());
+					            					//imp.setSlice(vstack.getSize());
 					            					
 					            					
 					            					double  tmp_disX_free=disX_free,
@@ -1372,8 +1383,13 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 					            							tmp_disY_holder=disY_holder,
 					            							tmp_disX_mid=disX_mid,
 					            							tmp_disY_mid=disY_mid;
-					            				    			            					
+					            				    	
+					            					Instant startTime = Instant.now();
+					            					imp.setSliceWithoutUpdate(vstack.getSize());
 					            					int matchresult = analyzeSlice(vstack.getSize(),imp_new.getProcessor());
+					            					Instant finishTime = Instant.now();
+					            					long timeElapsed = Duration.between(startTime, finishTime).toMillis();
+					            					IJ.showStatus(timeElapsed+" ms");
 					            						
 					            						if (matchresult==1) {
 					            							disX_free=tmp_disX_free;
@@ -1411,7 +1427,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 						            						rt.addValue("Length", cr_length);
 						            						rt.addValue("Curvature", curvature);
 						            						rt.addValue("Deformation", deformation);
-						            						
+						            												            											            						
 						            						
 						            						rt.setDecimalPlaces(2, 6);
 						            						rt.setDecimalPlaces(3, 6);
@@ -1620,6 +1636,8 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
     private int analyzeSlice(int slice, ImageProcessor slice_proc) {
 
  
+//    	long timeElapsed0=0, timeElapsed1=0, timeElapsed2=0, timeElapsed3=0, timeElapsed4=0, timeElapsed5=0, timeElapsed6=0;
+//    	Instant CPUTime6 = Instant.now();
         double[] coord_res = new double[3]; 
         Overlay overlay;
         
@@ -1739,7 +1757,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
  
         } else {
         	// Needed parts will be searched over the whole slice
-           
+          
         }
         
         if (matchIntensity) {
@@ -1909,6 +1927,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
         // We make iterations to find position of the rotated template 
         // of the free crystal's end
         // Iterations finish upon the convergence (but not more than 10 iterations are taken)
+        
         for (int iter=0;iter<10;iter++)
         {
         	
@@ -1929,7 +1948,6 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
     			// ... and fitted
     			free_mideal=doMatch_test(free_tpl.getProcessor(), (method==0?2:method));
     			coord_res = doMatch_coord_res(free_tar.getProcessor(), free_tpl.getProcessor(), method, subPixel, null);
-
     			if (!testMatchResult(coord_res[2], free_mideal, method, coord_res[0], coord_res[1], sArea*2, Math.min(free_rect.width, free_rect.height))) {
     				
     				
@@ -1974,9 +1992,8 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
     		            }
     		            gaussianBlur.blurGaussian(free_tar.getProcessor(), 2, 2, 0.02);        
     		            
-    		            
     		            coord_res = doMatch_coord_res(free_tar.getProcessor(), free_tpl.getProcessor(), method, subPixel, null);
-
+    		            
     	    			if (!testMatchResult(coord_res[2], free_mideal, method, coord_res[0], coord_res[1], sArea_new*2, Math.min(free_rect.width, free_rect.height))) {
     	    				
     	    				
@@ -2060,8 +2077,8 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 			mid_ip.rotate(-mid_angle);
 			mid_tpl.setRoi(mid_refCropRoi);
 			mid_tpl=mid_tpl.crop();
-			
 			mid_mideal=doMatch_test(mid_tpl.getProcessor(),(method==0?2:method));
+			
 
 
 			double x0 = (refX_free+disX_free+refX_att+disX_holder)/2.0 - (mid_rect.width)/2.0 - xStart_mid,
@@ -2087,7 +2104,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
      		lineCoord[2]=dx;
      		lineCoord[3]=dy;
      		coord_res = doMatch_coord_res(mid_tar.getProcessor(), mid_tpl.getProcessor(), method, subPixel, lineCoord);
-			
+     		
      		if (!testMatchResult(coord_res[2], mid_mideal, method, coord_res[0], coord_res[1], sArea*2, Math.min(mid_rect.width, mid_rect.height))) {
      			
      			
@@ -2158,9 +2175,8 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 		            }
 		                  
 		            gaussianBlur.blurGaussian(mid_tar.getProcessor(), 2, 2, 0.02);
-		            
 		            coord_res = doMatch_coord_res(mid_tar.getProcessor(), mid_tpl.getProcessor(), method, subPixel, lineCoord);
-
+		            
 	    			if (!testMatchResult(coord_res[2], mid_mideal, method, coord_res[0], coord_res[1], sArea_new*2, Math.min(mid_rect.width, mid_rect.height))) {
 	    				
 	    				
@@ -2241,7 +2257,7 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
             dytmp=disY_free;
         }
 		
-		
+        
         
         // the creation time of the image is taken from the EXIF metadata or incremented by timeStep
         
@@ -2378,9 +2394,8 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
 //        ref_ImageRoi.setOpacity(0.3);
 //        ref_ImageRoi.setZeroTransparent(true);
 //        overlay.addElement(ref_ImageRoi);
-        
+		
         imp.setSlice(slice);
-        
         imp.setOverlay(overlay);
         
         if (saveFlatten){
@@ -2389,6 +2404,9 @@ private boolean checkJavaCV(String version, boolean treatAsMinVer, String compon
         	String directory = fi.directory + "flatten"+File.separatorChar;
         	saveFlattenFrames(directory, seconds, false);
         }
+        
+        
+        
         return 0;
     }
     

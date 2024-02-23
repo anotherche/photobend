@@ -283,7 +283,7 @@
    					<artifactId>javafx-graphics</artifactId>
    				</exclusion>
    			</exclusions>
-   			<version>1.5.8</version>
+   			<version>1.5.10</version>
 		</dependency>
 		<dependency>
 			<groupId>com.drewnoakes</groupId>
@@ -337,13 +337,19 @@
 		        <configuration>
 		           <doCheck>true</doCheck> 
 		          	<doUpdate>true</doUpdate>
-		          	<format>{0,date,yyyy-MM-dd HH:mm:ss}</format>
+		          	<format>{0,date,yyyy/MM/dd}</format>
       				<items>
         				<item>timestamp</item>
       				</items>
 		        </configuration>
       		</plugin>
 		</plugins>
+		<resources>
+			<resource>
+	        	<directory>src/main/resources</directory>
+	        	<filtering>true</filtering>
+	     	</resource>
+    	</resources>
 	</build>
 
 </project>
